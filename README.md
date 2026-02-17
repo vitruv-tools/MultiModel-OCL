@@ -1,228 +1,477 @@
-# VitruvOCL
+# MultiModelOCL
 
-A domain-specific language for cross-metamodel OCL constraint evaluation in the Vitruvius framework.
+A domain-specific language for evaluating OCL constraints across multiple EMF metamodels with cross-model consistency checking.
 
 ## Overview
 
-VitruvOCL implements OCL# semantics for type-safe constraint evaluation across multiple EMF metamodels. It features a three-pass compiler architecture with smart metamodel loading, type checking, and support for cross-metamodel references.
+MultiModelOCL enables you to write and evaluate OCL constraints that span multiple metamodels in the same project. It implements OCL# semantics for null-safe, type-safe constraint evaluation with full EMF integration.
 
 **Key Features:**
-- **OCL# Semantics**: Null-safe
-- **Cross-Metamodel Constraints**: Reference entities across different metamodels
-- **Smart Loading**: Automatically loads only required metamodels
-- **Type Safety**: Full static type checking before evaluation
-- **EMF Integration**: Native support for Ecore metamodels and XMI instances
+- **Cross-Metamodel Constraints**: Reference entities across different metamodels in a single constraint
+- **OCL# Semantics**: Everything-is-a-collection approach eliminates null pointer exceptions
+- **VSCode Extension**: Interactive development with syntax highlighting and inline evaluation
+- **Type Safety**: Full static type checking before evaluation catches errors early
+- **Smart Loading**: Automatically discovers and loads metamodels and instances from your project
 
-Based on: Steinmann, F., Clarisó, R., Gogolla, M. (2025). ["Meet OCL{^\sharp }, a relational object constraint language"](https://link.springer.com/article/10.1007/s10270-025-01286-1).
+Based on: Steinmann, F., Clarisó, R., Gogolla, M. (2025). ["Meet OCL{^\sharp}, a relational object constraint language"](https://link.springer.com/article/10.1007/s10270-025-01286-1).
 
 ## Quick Start
 
-### Download
+### Installation
 
-//TODO
+**Prerequisites:**
+- Java 17 or higher
+- VSCode (for the extension)
 
-### Project Structure Convention
+**Download:**
+1. Download the latest release from [Releases](https://github.com/vitruv-tools/MultiModel-OCL)
+2. Extract the archive containing:
+   - `multimodelocl.jar` - Standalone compiler/evaluator
+   - `multimodelocl-X.X.X.vsix` - VSCode extension
+
+### VSCode Extension Setup
+
+1. **Install Extension:**
+   - Open VSCode
+   - Go to `Extensions` view (`Ctrl+Shift+X`)
+   - Click `...` menu → `Install from VSIX...`
+   - Select the downloaded `multimodelocl-X.X.X.vsix`
+   - Reload VSCode when prompted
+
+2. **Verify Installation:**
+   - Open any `.ocl` file
+   - You should see syntax highlighting
+   - Run buttons (▶) should appear above constraints
+
+### Project Structure
+
+Organize your project following this convention:
 ```
 your-project/
-  constraints.ocl       # Constraint definitions
-  metamodels/
-    model1.ecore
-    model2.ecore
-  instances/
-    instance1.xmi
-    instance2.model1
+├── constraints.ocl          # Your constraint definitions
+├── metamodels/              # Place .ecore files here
+│   ├── model1.ecore
+│   └── model2.ecore
+└── instances/               # Place model instances here
+    ├── instance1.xmi
+    ├── instance2.model1
+    └── instance3.model2
 ```
 
-### Example Usage
+**Notes:**
+- Instance files can have any extension (`.xmi`, `.model1`, custom extensions)
+- The extension will automatically discover all `.ecore` files in `metamodels/`
+- All files in `instances/` will be loaded as model instances
 
-**constraints.ocl:**
+### Your First Constraint
+
+Create `constraints.ocl`:
 ```ocl
--- Simple constraint
-context spaceMission::Spacecraft inv:
+-- Simple constraint: all spacecraft must have positive mass
+context spaceMission::Spacecraft inv positiveM ass:
   self.mass > 0
 
--- Cross-metamodel constraint
-context spaceMission::Spacecraft inv:
-  satelliteSystem::Satellite.allInstances().collect(sat |
-    sat.massKg
-  ).sum() > self.mass
+-- Cross-metamodel constraint: total satellite mass must exceed spacecraft mass
+context spaceMission::Spacecraft inv satelliteMassCheck:
+  satelliteSystem::Satellite.allInstances()
+    .collect(sat | sat.massKg)
+    .sum() > self.mass
 ```
 
-**Java API:**
-```java
-import tools.vitruv.dsls.vitruvOCL.pipeline.*;
-import java.nio.file.Path;
+### Running Constraints
 
-public class Main {
-    public static void main(String[] args) throws Exception {
-        // Evaluate project
-        BatchValidationResult result = VitruvOCL.evaluateProject(
-            Path.of(".")
-        );
-        
-        System.out.println("Satisfied: " + result.getSatisfiedCount());
-        System.out.println("Violated: " + result.getViolatedCount());
+#### In VSCode (Recommended)
+
+1. **Open** your `constraints.ocl` file
+2. **Run single constraint:** Click the ▶ button next to any constraint
+3. **Run all constraints:** Click the `▶ Run All` button at the top of the file
+4. **View results:**
+   - ✓ (green checkmark) = constraint passed
+   - ✗ (red X) = constraint violated
+   - Red squiggles = compilation errors
+   - Output panel shows detailed violation messages
+
+#### Command Line
+```bash
+# Evaluate all constraints in a project
+java -jar multimodelocl.jar eval-batch constraints.ocl \
+  --ecore metamodels/model1.ecore,metamodels/model2.ecore \
+  --xmi instances/instance1.xmi,instances/instance2.model1
+
+# Evaluate single constraint by name
+java -jar multimodelocl.jar eval constraints.ocl \
+  --constraint myConstraintName \
+  --ecore metamodels/model1.ecore \
+  --xmi instances/instance1.xmi
+```
+
+**JSON Output:**
+```json
+{
+  "success": true,
+  "constraints": [
+    {
+      "name": "positiveMass",
+      "success": true,
+      "satisfied": true
+    },
+    {
+      "name": "satelliteMassCheck",
+      "success": true,
+      "satisfied": false,
+      "warnings": ["Constraint violated for instances: [spacecraft1.spacemission]"]
     }
+  ]
 }
 ```
 
-**Run:**
-```bash
-javac -cp "lib/vitruvOCL-0.1.0.jar" Main.java
-java -cp ".;lib/vitruvOCL-0.1.0.jar" Main  # Windows
-java -cp ".:lib/vitruvOCL-0.1.0.jar" Main  # Linux/Mac
-```
+## Language Reference
 
-See [examples/](examples/) for complete working examples.
+### Constraint Syntax
 
-## Syntax
-
-VitruvOCL extends standard OCL with cross-metamodel support and follows OCL# semantics.
+**Components:**
+- `context`: Defines which class the constraint applies to
+- `MetamodelName::ClassName`: Fully qualified class name (required)
+- `inv`: Invariant keyword
+- `constraintName`: Unique identifier for this constraint
+- `expression`: OCL expression that must evaluate to true
 
 ### Key Differences from Standard OCL
 
-- **Unified dot notation**: Use `.` for all navigation (no `->` operator)
-- **Inequality operator**: Use `!=` instead of `<>`
-- **Everything is a collection**: Single values are singletons `[5]`, null is empty `[]`
-- **1-based indexing**: Collections start at index 1
-- **Fully qualified names**: `metamodelName::ClassName`
-
-### Constraint Format
+**1. Unified Dot Notation:**
 ```ocl
--- Comments start with double dash
-context MetamodelName::ClassName inv:
-  expression
+-- MultiModelOCL uses . for everything
+collection.select(x | x > 5)
+
+-- Standard OCL uses ->
+collection->select(x | x > 5)
 ```
+
+**2. Inequality Operator:**
+```ocl
+x != y    -- MultiModelOCL
+x <> y    -- Standard OCL
+```
+
+**3. Everything is a Collection:**
+```ocl
+-- Single values are singletons
+5         -- becomes [5]
+"hello"   -- becomes ["hello"]
+
+-- Null becomes empty collection
+null      -- becomes []
+```
+
+**4. Fully Qualified Names Required:**
+```ocl
+context spaceMission::Spacecraft inv:  -- ✓ Correct
+context Spacecraft inv:                 -- ✗ Error
+```
+
 ### Supported Operations
 
-**Collection Operations:**
-- `select(iterator | condition)` - Filter elements
-- `reject(iterator | condition)` - Exclude elements
-- `collect(iterator | expression)` - Transform elements
-- `forAll(iterator | condition)` - Universal quantification
-- `exists(iterator | condition)` - Existential quantification
-- `size()`, `isEmpty()`, `notEmpty()`
-- `includes(value)`, `excludes(value)`
-- `including(value)`, `excluding(value)` - Add/remove elements
-- `union(collection)`, `append(value)` - Combine collections
-- `flatten()` - Flatten nested collections
-- `sum()`, `avg()`, `min()`, `max()` - Numeric aggregations
-- `abs()`, `floor()`, `ceil()`, `round()` - Numeric operations
-- `first()`, `last()`, `reverse()` - Sequence operations
-- `at(index)` - Access by index (1-based)
-- `lift()` - Lift operation
-- `allInstances()` - Get all instances of a type
+#### Collection Operations
+```ocl
+-- Filtering
+collection.select(x | x > 5)        -- Keep elements matching condition
+collection.reject(x | x > 5)        -- Remove elements matching condition
 
-**Arithmetic:**
-- `+`, `-`, `*`, `/`, `%`
-- Unary minus: `-expression`
+-- Transformation
+collection.collect(x | x * 2)       -- Transform each element
 
-**Comparison:**
-- `<`, `<=`, `>`, `>=`, `==`, `!=`
+-- Quantifiers
+collection.forAll(x | x > 0)        -- All elements must satisfy
+collection.exists(x | x > 100)      -- At least one element must satisfy
 
-**Boolean:**
-- `and`, `or`, `xor`, `not`, `implies`
+-- Size/emptiness
+collection.size()                    -- Number of elements
+collection.isEmpty()                 -- True if empty
+collection.notEmpty()                -- True if not empty
 
-**String:**
-- `concat(string)`, `size()`
-- `toUpper()`, `toLower()`
-- `substring(start, end)`
-- `indexOf(substring)`
-- `equalsIgnoreCase(string)`
+-- Membership
+collection.includes(value)           -- True if contains value
+collection.excludes(value)           -- True if doesn't contain value
 
-**Control Flow:**
-- `if condition then expr1 else expr2 endif`
-- `let variable = expression in body`
-- Multiple variables: `let x = 1, y = 2 in x + y`
+-- Modification (returns new collection)
+collection.including(value)          -- Add element
+collection.excluding(value)          -- Remove element
 
-**Type Checking:**
-- `oclIsKindOf(Type)` - Check if instance is kind of type
-- `oclIsTypeOf(Type)` - Check exact type
-- `oclAsType(Type)` - Cast to type
+-- Combination
+collection1.union(collection2)       -- Union of collections
+collection.append(value)             -- Add to end
+collection.flatten()                 -- Flatten nested collections
 
-**Cross-Metamodel:**
-- `~` (squiggle) - Correspondence operator (planned)
-- `^` (caret) - Message operator (planned)
+-- Aggregation
+collection.sum()                     -- Sum of numeric values
+collection.avg()                     -- Average
+collection.min()                     -- Minimum value
+collection.max()                     -- Maximum value
 
-## Architecture
+-- Sequence operations
+collection.first()                   -- First element
+collection.last()                    -- Last element
+collection.at(index)                 -- Element at index (1-based)
+collection.reverse()                 -- Reversed collection
 
-VitruvOCL uses a three-pass compiler architecture:
+-- Special
+Type.allInstances()                  -- All instances of a type
+collection.lift()                    -- Lift operation
+```
 
-1. **Pass 1 - Symbol Table Construction**: Builds scope hierarchy, registers variables
-2. **Pass 2 - Type Checking**: Validates operations, produces type annotations
-3. **Pass 3 - Evaluation**: Executes constraints against EMF model instances
+#### Arithmetic Operations
+```ocl
+x + y      -- Addition
+x - y      -- Subtraction
+x * y      -- Multiplication
+x / y      -- Division (real division)
+x % y      -- Modulo
+-x         -- Unary minus
+x.abs()    -- Absolute value
+x.floor()  -- Round down
+x.ceil()   -- Round up
+x.round()  -- Round to nearest
+```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design documentation.
+#### Comparison Operations
+```ocl
+x < y      -- Less than
+x <= y     -- Less than or equal
+x > y      -- Greater than
+x >= y     -- Greater than or equal
+x == y     -- Equal
+x != y     -- Not equal
+```
+
+#### Boolean Operations
+```ocl
+a and b      -- Logical AND
+a or b       -- Logical OR
+a xor b      -- Logical XOR
+not a        -- Logical NOT
+a implies b  -- Logical implication
+```
+
+#### String Operations
+```ocl
+str.concat("text")              -- Concatenate strings
+str.size()                      -- Length of string
+str.toUpper()                   -- Convert to uppercase
+str.toLower()                   -- Convert to lowercase
+str.substring(start, end)       -- Extract substring (1-based)
+str.indexOf("sub")              -- Find substring position
+str.equalsIgnoreCase("TEXT")    -- Case-insensitive comparison
+```
+
+#### Control Flow
+```ocl
+-- Conditional expression
+if condition then
+  expression1
+else
+  expression2
+endif
+
+-- Let binding (single variable)
+let x = 10 in
+  x * 2
+
+-- Let binding (multiple variables)
+let x = 10, y = 20 in
+  x + y
+```
+
+#### Type Operations
+```ocl
+object.oclIsKindOf(Type)     -- Check if instance is kind of type
+object.oclIsTypeOf(Type)     -- Check exact type match
+object.oclAsType(Type)       -- Cast to type
+```
+
+### Cross-Metamodel Features
+
+Access instances from other metamodels using fully qualified names:
+```ocl
+context spaceMission::Spacecraft inv:
+  -- Get all satellites from different metamodel
+  satelliteSystem::Satellite.allInstances()
+    .collect(s | s.massKg)
+    .sum() > self.mass
+```
+## Examples
+
+See [examples/exampleproject](examples/exampleproject) for complete working examples including:
+- Basic constraints on single metamodels
+- Cross-metamodel constraints
+- Collection operations
+- Arithmetic and boolean logic
+- Let bindings and conditionals
+
+## VSCode Extension
+
+### Features
+
+- **Syntax Highlighting**: OCL-specific keyword and operator coloring
+- **CodeLens Buttons**: `▶ Run All` at top, `▶` for each constraint
+- **Live Feedback**: 
+  - Green ✓ gutter icons for passing constraints
+  - Red ✗ for failing constraints
+  - Red squiggles for errors with hover tooltips
+- **Output Panel**: Detailed results with violation messages
+- **Project Discovery**: Automatically finds `.ecore` and instance files
+
+### Building from Source
+```bash
+cd vscode-extension
+
+# Install dependencies
+npm install
+
+# Compile TypeScript
+npm run compile
+
+# Package extension
+npm run package
+```
+
+This creates `multimodelocl-X.X.X.vsix` which you can install via `Extensions → Install from VSIX...`
+
+### Extension Settings
+
+Configure in VSCode settings (`Ctrl+,`):
+```json
+{
+  "multimodelocl.compilerPath": "/path/to/multimodelocl.jar"
+}
+```
+
+Leave empty for automatic detection (extension includes bundled JAR).
 
 ## Building from Source
 
 ### Prerequisites
 
 - Java 17+
-- Maven 3.6+
+- Maven 3.9+
+- Node.js 20+ (for VSCode extension)
 
-### Build
+### Build Compiler/CLI
 ```bash
+# Build JAR
 mvn clean package
+
+# JAR location
+ls language/target/multimodelocl.jar
+
+# Run tests
+mvn test
+
+# View coverage report
+open language/target/site/jacoco/index.html
 ```
 
-JAR will be in `language/target/vitruvOCL-0.1.0-SNAPSHOT.jar`
-
-### Run Tests
+### Build VSCode Extension
 ```bash
-mvn clean test
+cd vscode-extension
+
+# First build the compiler JAR (it gets bundled)
+cd ..
+mvn clean package
+cp language/target/multimodelocl.jar vscode-extension/lib/
+
+# Then build extension
+cd vscode-extension
+npm install
+npm run compile
+npm run package
 ```
 
-Test coverage report: `language/target/site/jacoco/index.html`
+### Project Structure
+```
+MultiModel-OCL/
+├── language/                   # Compiler implementation
+│   ├── src/main/
+│   │   ├── antlr4/            # Grammar definition
+│   │   └── java/              # Compiler passes, evaluator
+│   └── pom.xml
+├── vscode-extension/           # VSCode extension
+│   ├── src/extension.ts       # Extension logic
+│   ├── syntaxes/              # Syntax highlighting
+│   ├── lib/                   # Bundled JAR
+│   └── package.json
+├── examples/                   # Example projects
+└── pom.xml                    # Parent POM
+```
+
+## Architecture
+
+MultiModelOCL uses a three-pass compiler architecture:
+
+### Pass 1: Symbol Table Construction
+- Parses OCL file using ANTLR4 grammar
+- Builds scope hierarchy for variable visibility
+- Registers all variable declarations (`self`, let-bindings, iterators)
+
+### Pass 2: Type Checking
+- Validates all operations have compatible types
+- Checks property and operation existence on EMF classes
+- Produces type annotations for every expression
+- Reports errors before evaluation begins
+
+### Pass 3: Evaluation
+- Executes constraints against EMF model instances
+- Uses type annotations to safely navigate models
+- Implements OCL# collection semantics
+- Returns structured results (satisfied/violated/errors)
+
+**Key Design Decisions:**
+- **Everything is a Collection**: Eliminates null pointer exceptions, simplifies type rules
+- **Lazy Loading**: Only loads metamodels that constraints actually reference
+- **Immutable Collections**: All collection operations return new collections
+- **1-Based Indexing**: Matches OCL specification and mathematical conventions
+
+For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## API Documentation
 
-Full JavaDoc available in `tools.vitruv.dsls.vitruvOCL.pipeline.VitruvOCL` class.
-
-### Main API Methods
-
-**Project-based evaluation:**
+The compiler can be used programmatically via the Java API (planned):
 ```java
-BatchValidationResult evaluateProject(Path projectDir)
+import tools.vitruv.multimodelocl.pipeline.*;
+import java.nio.file.Path;
+
+public class Main {
+    public static void main(String[] args) throws Exception {
+        // Evaluate project with auto-discovery
+        BatchValidationResult result = MultiModelOCL.evaluateProject(
+            Path.of(".")
+        );
+        
+        // Print summary
+        System.out.println("Passed: " + result.getSatisfiedCount());
+        System.out.println("Failed: " + result.getViolatedCount());
+        
+        // Iterate over results
+        for (ConstraintResult cr : result.getResults()) {
+            System.out.println(cr.getName() + ": " + 
+                (cr.isSatisfied() ? "✓" : "✗"));
+        }
+    }
+}
 ```
-
-**Single constraint:**
-```java
-ConstraintResult evaluateConstraint(
-    String constraint, 
-    Path[] ecoreFiles, 
-    Path[] xmiFiles
-)
-```
-
-**Multiple constraints from file:**
-```java
-BatchValidationResult evaluateConstraints(
-    Path constraintsFile,
-    Path[] ecoreFiles,
-    Path[] xmiFiles
-)
-```
-
-## Examples
-
-- [/exampleproject](examples/exampleproject) - Basic constraint evaluation examples
-
-
-## Contributing
-
-This project was developed as part of a Master's thesis at KIT. Contributions are welcome after the initial release.
 
 ## License
 
-This project is licensed under the Eclipse Public License 2.0 - see [LICENSE](LICENSE) file for details.
+This project is licensed under the Eclipse Public License 2.0 - see [LICENSE](LICENSE) for details.
 
 ### Third-Party Licenses
 
-See [NOTICE](NOTICE) for information about third-party dependencies and their licenses.
+- ANTLR 4.13.2 - BSD 3-Clause License
+- Eclipse EMF - Eclipse Public License 2.0
+- Jackson - Apache License 2.0
 
+See [NOTICE](NOTICE) for complete third-party license information.
 
 ## Acknowledgments
 
 - Grammar derived from DeepOCL implementation by Ralph Gerbig and Arne Lange (University of Mannheim)
-- Based on OCL# semantics by Gogolla et al.
+- OCL# semantics based on work by Gogolla, Clarisó, and Steinmann
