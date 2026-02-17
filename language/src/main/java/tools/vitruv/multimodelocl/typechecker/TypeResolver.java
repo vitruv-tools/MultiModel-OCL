@@ -1,0 +1,408 @@
+/*******************************************************************************
+ * Copyright (c) 2026 Max Oesterle
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * https://www.eclipse.org/legal/epl-2.0/
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ *
+ * Contributors:
+ *    Max Oesterle - initial API and implementation
+ *******************************************************************************/
+package tools.vitruv.multimodelocl.typechecker;
+
+/**
+ * Static helper methods for type resolution and type operations.
+ *
+ * <p><b>Purpose:</b> Shared type resolution logic that can be used by both the TypeCheckVisitor and
+ * later by the evaluator.
+ *
+ * <p><b>Features:</b>
+ *
+ * <ul>
+ *   <li>Binary operator type resolution: {@code resolveBinaryOp("+", Integer, Integer) -> Integer}
+ *   <li>Type conformance: {@code isConformantTo(subtype, supertype)}
+ *   <li>Common supertype: {@code commonSupertype(Type a, Type b)}
+ *   <li>Collection element type extraction
+ * </ul>
+ *
+ * <p><b>No duplication:</b> This logic is identical for type checking and evaluation, so it is
+ * centralized in this helper class.
+ */
+public class TypeResolver {
+
+  private TypeResolver() {} // Pure static utility class
+
+  /**
+   * Resolves the result type of a binary operation.
+   *
+   * @param operator "+", "-", "*", "/", "=", "<", etc.
+   * @param leftType type of the left operand
+   * @param rightType type of the right operand
+   * @return the result type, or {@link Type#ERROR} in case of a type mismatch
+   */
+  public static Type resolveBinaryOp(String operator, Type leftType, Type rightType) {
+    if (leftType == Type.ERROR || rightType == Type.ERROR) {
+      return Type.ERROR;
+    }
+
+    // SPECIAL CASE: ANY type (from empty collections or untyped contexts)
+    // Allow operations and infer result type
+    if (leftType == Type.ANY || rightType == Type.ANY) {
+      return switch (operator) {
+        case "+", "-", "*", "/" -> Type.INTEGER; // Arithmetic → Integer
+        case "and", "or", "xor", "implies" -> Type.BOOLEAN; // Boolean operations
+        case "<", "<=", ">", ">=", "==", "!=" -> Type.BOOLEAN; // Comparisons
+        default -> Type.ERROR;
+      };
+    }
+
+    // Equality/Inequality: Allow collections to be compared
+    if (operator.equals("==") || operator.equals("!=")) {
+      // Both are collections: compare element types
+      if (leftType.isCollection() && rightType.isCollection()) {
+        Type leftElem = leftType.getElementType();
+        Type rightElem = rightType.getElementType();
+        if (leftElem.isConformantTo(rightElem)
+            || rightElem.isConformantTo(leftElem)
+            || leftElem == Type.ANY
+            || rightElem == Type.ANY) {
+          return Type.BOOLEAN;
+        }
+        return Type.ERROR;
+      }
+      // Fall through to singleton comparison below
+    }
+
+    // Unwrap SINGLETON collections for arithmetic/ordering/boolean ops
+    // Real collections (SET, SEQUENCE) stay wrapped and will cause error
+    if (leftType.isSingleton()) {
+      leftType = leftType.getElementType();
+    }
+    if (rightType.isSingleton()) {
+      rightType = rightType.getElementType();
+    }
+
+    // After unwrapping: If still collections → ERROR
+    // (Collections not allowed for arithmetic, ordering, or boolean ops)
+    if (leftType.isCollection() || rightType.isCollection()) {
+      return Type.ERROR;
+    }
+
+    // Check again after unwrapping (collection element might be ANY)
+    if (leftType == Type.ANY || rightType == Type.ANY) {
+      return switch (operator) {
+        case "+", "-", "*", "/" -> Type.INTEGER;
+        case "and", "or", "xor", "implies" -> Type.BOOLEAN;
+        case "<", "<=", ">", ">=", "==", "!=" -> Type.BOOLEAN;
+        default -> Type.ERROR;
+      };
+    }
+
+    // Arithmetic Operations
+    if (operator.equals("+")
+        || operator.equals("-")
+        || operator.equals("*")
+        || operator.equals("/")) {
+      if (leftType == Type.INTEGER && rightType == Type.INTEGER) {
+        return Type.INTEGER;
+      }
+      if (leftType == Type.DOUBLE && rightType == Type.DOUBLE) {
+        return Type.DOUBLE;
+      }
+      if (leftType == Type.INTEGER && rightType == Type.DOUBLE) {
+        return Type.DOUBLE;
+      }
+      if (leftType == Type.DOUBLE && rightType == Type.INTEGER) {
+        return Type.DOUBLE;
+      }
+      return Type.ERROR;
+    }
+
+    // Logical Operations
+    if (operator.equals("and") || operator.equals("or") || operator.equals("xor")) {
+      if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN) {
+        return Type.BOOLEAN;
+      }
+      return Type.ERROR;
+    }
+
+    // Equality Comparison (for singletons/primitives)
+    if (operator.equals("==") || operator.equals("!=")) {
+      if (leftType == Type.INTEGER && rightType == Type.INTEGER) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.INTEGER && rightType == Type.DOUBLE) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.DOUBLE && rightType == Type.INTEGER) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.STRING && rightType == Type.STRING) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.STRING && rightType == Type.DOUBLE) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.STRING && rightType == Type.INTEGER) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.STRING && rightType == Type.BOOLEAN) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.DOUBLE && rightType == Type.STRING) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.INTEGER && rightType == Type.STRING) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.BOOLEAN && rightType == Type.STRING) {
+        return Type.BOOLEAN;
+      }
+      return Type.ERROR;
+    }
+
+    // Numerical Comparison (ordering operators)
+    if (operator.equals("<")
+        || operator.equals(">")
+        || operator.equals(">=")
+        || operator.equals("<=")) {
+      if (leftType == Type.INTEGER && rightType == Type.INTEGER) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.INTEGER && rightType == Type.DOUBLE) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.DOUBLE && rightType == Type.INTEGER) {
+        return Type.BOOLEAN;
+      }
+      return Type.ERROR;
+    }
+
+    return Type.ERROR;
+  }
+
+  /**
+   * resolves the result-Type of a unary Operation auf.
+   *
+   * @param operator "-", "not", etc.
+   * @param operandType Type des Operanden
+   * @return Result Type or Type.ERROR at Type Mismatch
+   */
+  public static Type resolveUnaryOp(String operator, Type operandType) {
+    return switch (operator) {
+      case "-" -> operandType.isConformantTo(Type.INTEGER) ? Type.INTEGER : Type.ERROR;
+      case "not" -> operandType.isConformantTo(Type.BOOLEAN) ? Type.BOOLEAN : Type.ERROR;
+      default -> Type.ERROR;
+    };
+  }
+
+  /**
+   * Resolves the result type of a collection operation.
+   *
+   * @param sourceType The collection type
+   * @param operationName The operation name (includes, size, select, etc.)
+   * @param argumentTypes The types of operation arguments
+   * @return The result type or Type.ERROR
+   */
+  public static Type resolveCollectionOperation(
+      Type sourceType, String operationName, Type... argumentTypes) {
+    if (!sourceType.isCollection()) {
+      return Type.ERROR;
+    }
+
+    Type elementType = sourceType.getElementType();
+
+    switch (operationName) {
+      // Query operations -> Boolean
+      case "includes":
+      case "excludes":
+      case "isEmpty":
+      case "notEmpty":
+        return Type.BOOLEAN;
+
+      // Size -> Integer
+      case "size":
+        return Type.INTEGER;
+
+      // Including/Excluding -> Same collection type
+      case "including":
+      case "excluding":
+        // Validate argument type if provided
+        if (argumentTypes.length > 0) {
+          if (!argumentTypes[0].isConformantTo(elementType)) {
+            return Type.ERROR;
+          }
+        }
+        return sourceType;
+
+      // Filter operations -> Same collection type
+      case "select":
+      case "reject":
+        return sourceType;
+
+      // Collect -> Collection of transformed type
+      case "collect":
+        // Requires lambda type inference (simplified for now)
+        return Type.set(Type.ANY);
+
+      // Element extraction -> Optional of element type
+      case "first":
+      case "last":
+      case "any":
+        return Type.optional(elementType);
+
+      // Flatten -> Unwrap nested collections
+      case "flatten":
+        if (elementType.isCollection()) {
+          return Type.set(elementType.getElementType());
+        }
+        return sourceType;
+
+      // Sum -> Integer or Double
+      case "sum":
+        if (elementType == Type.INTEGER) {
+          return Type.INTEGER;
+        }
+        if (elementType == Type.DOUBLE) {
+          return Type.DOUBLE;
+        }
+        return Type.ERROR;
+
+      // Type conversion operations
+      case "asSet":
+        return Type.set(elementType);
+
+      case "asSequence":
+      case "asBag":
+      case "asOrderedSet":
+        return Type.sequence(elementType);
+
+      // Union/intersection -> Same collection type
+      case "union":
+      case "intersection":
+        if (argumentTypes.length > 0 && argumentTypes[0].isCollection()) {
+          // Check element type compatibility
+          Type otherElement = argumentTypes[0].getElementType();
+          if (elementType.isConformantTo(otherElement)
+              || otherElement.isConformantTo(elementType)) {
+            return sourceType;
+          }
+        }
+        return Type.ERROR;
+
+      default:
+        return Type.ERROR;
+    }
+  }
+
+  /** Checks if an operation is a valid collection operation. */
+  public static boolean isCollectionOperation(String operationName) {
+    return switch (operationName) {
+      case "includes",
+              "excludes",
+              "isEmpty",
+              "notEmpty",
+              "size",
+              "including",
+              "excluding", // <- ADDED!
+              "select",
+              "reject",
+              "collect",
+              "first",
+              "last",
+              "any",
+              "union",
+              "intersection",
+              "flatten",
+              "sum",
+              "asSet",
+              "asSequence",
+              "asBag",
+              "asOrderedSet" ->
+          true;
+      default -> false;
+    };
+  }
+
+  /**
+   * Resolves object operations (non-collection methods).
+   *
+   * @param sourceType The type of the object
+   * @param operationName The operation name (toUpper, size, etc.)
+   * @param argumentTypes The types of operation arguments
+   * @return The result type or Type.ERROR
+   */
+  public static Type resolveObjectOperation(
+      Type sourceType, String operationName, Type... argumentTypes) {
+    // String operations
+    if (sourceType == Type.STRING) {
+      switch (operationName) {
+        case "size":
+        case "length":
+          return Type.INTEGER;
+
+        case "toUpper":
+        case "toLower":
+        case "trim":
+        case "substring":
+          return Type.STRING;
+
+        case "startsWith":
+        case "endsWith":
+        case "contains":
+        case "equalsIgnoreCase":
+          return Type.BOOLEAN;
+
+        case "concat":
+          // concat requires a String argument
+          if (argumentTypes.length > 0 && argumentTypes[0] == Type.STRING) {
+            return Type.STRING;
+          }
+          return Type.ERROR;
+
+        default:
+          return Type.ERROR;
+      }
+    }
+
+    // Integer/Double operations
+    if (sourceType == Type.INTEGER || sourceType == Type.DOUBLE) {
+      switch (operationName) {
+        case "abs":
+        case "max":
+        case "min":
+          return sourceType;
+
+        case "toString":
+          return Type.STRING;
+
+        default:
+          return Type.ERROR;
+      }
+    }
+
+    // Boolean operations
+    if (sourceType == Type.BOOLEAN) {
+      switch (operationName) {
+        case "toString":
+          return Type.STRING;
+
+        default:
+          return Type.ERROR;
+      }
+    }
+
+    // Unknown type or operation
+    return Type.ERROR;
+  }
+
+  /** Checks if an operation is a valid object operation for the given type. */
+  public static boolean isObjectOperation(Type sourceType, String operationName) {
+    return resolveObjectOperation(sourceType, operationName) != Type.ERROR;
+  }
+}

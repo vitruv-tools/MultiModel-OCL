@@ -1,0 +1,111 @@
+{
+  "name": "multimodelocl",
+  "displayName": "multimodelocl",
+  "description": "OCL constraint evaluation for Multi-Model Scenarios",
+  "version": "0.0.1",
+  "publisher": "multimodelocl",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "multimodelocl",
+        "aliases": [
+          "multimodelocl",
+          "vocl"
+        ],
+        "extensions": [
+          ".ocl",
+          ".vocl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "multimodelocl",
+        "scopeName": "source.multimodelocl",
+        "path": "./syntaxes/multimodelocl.tmLanguage.json"
+      }
+    ],
+    "views": {
+      "test": [
+        {
+          "id": "multimodeloclTestExplorer",
+          "name": "multimodelocl Constraints"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "multimodelocl.runAllConstraints",
+          "when": "view == multimodelocl",
+          "group": "navigation"
+        },
+        {
+          "command": "multimodelocl.refreshExplorer",
+          "when": "view == multimodeloclTestExplorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "multimodelocl.runConstraint",
+          "when": "view == multimodeloclTestExplorer && viewItem == constraint",
+          "group": "inline"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "multimodelocl.runConstraint",
+        "title": "Run multimodelocl Constraint",
+        "icon": "$(play)"
+      },
+      {
+        "command": "multimodelocl.runAllConstraints",
+        "title": "Run All multimodelocl Constraints",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "multimodelocl.refreshExplorer",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "multimodelocl.checkDocument",
+        "title": "Check multimodelocl Document",
+        "icon": "$(check)"
+      }
+    ],
+    "configuration": {
+      "title": "multimodelocl",
+      "properties": {
+        "multimodelocl.compilerPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to multimodelocl.jar (leave empty for auto-detection)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.0"
+  }
+}

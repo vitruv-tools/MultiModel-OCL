@@ -1,0 +1,3979 @@
+package tools.vitruv.multimodelocl.typechecker;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.tree.ParseTree;
+import org.antlr.v4.runtime.tree.ParseTreeProperty;
+import org.antlr.v4.runtime.tree.TerminalNode;
+import org.eclipse.emf.ecore.EClass;
+import org.eclipse.emf.ecore.EClassifier;
+import org.eclipse.emf.ecore.EStructuralFeature;
+import org.eclipse.emf.ecore.EcorePackage;
+import tools.vitruv.multimodelocl.OCLParser;
+import tools.vitruv.multimodelocl.common.AbstractPhaseVisitor;
+import tools.vitruv.multimodelocl.common.ErrorCollector;
+import tools.vitruv.multimodelocl.common.ErrorSeverity;
+import tools.vitruv.multimodelocl.evaluator.EvaluationVisitor;
+import tools.vitruv.multimodelocl.pipeline.MetamodelWrapperInterface;
+import tools.vitruv.multimodelocl.symboltable.Scope;
+import tools.vitruv.multimodelocl.symboltable.ScopeAnnotator;
+import tools.vitruv.multimodelocl.symboltable.Symbol;
+import tools.vitruv.multimodelocl.symboltable.SymbolTable;
+import tools.vitruv.multimodelocl.symboltable.VariableSymbol;
+
+/**
+ * Phase 2 visitor that performs static type checking on OCL expressions.
+ *
+ * <p>This visitor implements the <b>type checking phase</b> of the VitruvOCL compiler pipeline,
+ * operating after symbol table construction (Phase 1) and before evaluation (Phase 3). It validates
+ * type rules, ensures type safety, and annotates the parse tree with type information.
+ *
+ * <h2>Core Responsibilities</h2>
+ *
+ * <ul>
+ *   <li><b>Type inference:</b> Determines the type of each expression in the parse tree
+ *   <li><b>Type checking:</b> Validates that operations are applied to compatible types
+ *   <li><b>Type annotation:</b> Stores computed types in {@code nodeTypes} for use by the evaluator
+ *   <li><b>Error reporting:</b> Collects type errors with source location information
+ *   <li><b>Scope management:</b> Handles variable scoping for let-expressions and iterators
+ * </ul>
+ *
+ * <h2>Architecture</h2>
+ *
+ * The type checker uses a {@code receiverStack} to track receiver types during navigation chain
+ * type checking. For example, in {@code person.company.employees}, the stack helps propagate types
+ * through the chain:
+ *
+ * <ol>
+ *   <li>Push {@code Person} type
+ *   <li>Check {@code .company} → push {@code Company} type
+ *   <li>Check {@code .employees} → push {@code Set(Employee)} type
+ * </ol>
+ *
+ * <h2>Type System Features</h2>
+ *
+ * <ul>
+ *   <li><b>OCL# semantics:</b> "Everything is a collection" - singletons are {@code
+ *       Collection(T,1,1)}
+ *   <li><b>Collection types:</b> Set, Bag, Sequence, OrderedSet with element types
+ *   <li><b>Primitive types:</b> Integer, String, Boolean, Real (Double)
+ *   <li><b>Metaclass types:</b> Types representing EMF EClasses
+ *   <li><b>Type conformance:</b> Subtype relationships and type compatibility checking
+ *   <li><b>Implicit operations:</b> Implicit collect on collections during property access
+ * </ul>
+ *
+ * <h2>Error Handling</h2>
+ *
+ * Type errors are collected in the {@link ErrorCollector} with severity levels (ERROR, WARNING).
+ * The visitor continues checking after errors to report multiple issues in one pass. Errors
+ * include:
+ *
+ * <ul>
+ *   <li>Type mismatches in operations (e.g., {@code 5 + "hello"})
+ *   <li>Unknown properties or operations
+ *   <li>Incompatible types in if-then-else branches
+ *   <li>Invalid receiver types for operations
+ *   <li>Variable redefinition in scopes
+ * </ul>
+ *
+ * <h2>Usage in Pipeline</h2>
+ *
+ * <pre>{@code
+ * SymbolTable symbolTable = symbolTableBuilder.build(parseTree);
+ * TypeCheckVisitor typeChecker = new TypeCheckVisitor(
+ *     symbolTable, metamodelWrapper, errorCollector);
+ * typeChecker.setTokenStream(tokens);
+ * typeChecker.visit(parseTree);
+ *
+ * if (!errorCollector.hasErrors()) {
+ *     ParseTreeProperty<Type> nodeTypes = typeChecker.getNodeTypes();
+ *     // Pass to evaluation phase
+ * }
+ * }</pre>
+ *
+ * @see Type The type system implementation
+ * @see TypeResolver Helper class for binary operation type resolution
+ * @see EvaluationVisitor Phase 3 visitor that uses the type information
+ */
+public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
+
+  // ==================== Instance Fields ====================
+
+  /**
+   * Stack of receiver types for navigation chain type checking.
+   *
+   * <p>During navigation like {@code a.b.c()}, this stack tracks the type at each step:
+   *
+   * <ul>
+   *   <li>Push type of {@code a}
+   *   <li>Check {@code .b} using type from stack, push result type
+   *   <li>Check {@code .c()} using type from stack
+   * </ul>
+   *
+   * This allows operation visitor methods to access their receiver type via {@code
+   * receiverStack.peek()}.
+   */
+  private final Deque<Type> receiverStack = new ArrayDeque<>();
+
+  /**
+   * Maps parse tree nodes to their computed types.
+   *
+   * <p>This property is populated during type checking and retrieved by {@link #getNodeTypes()} for
+   * use in the evaluation phase. The evaluator uses these pre-computed types for type-dependent
+   * operations.
+   */
+  private final ParseTreeProperty<Type> nodeTypes = new ParseTreeProperty<>();
+
+  /** Symbol table for variable and type resolution. */
+  private final SymbolTable symbolTable;
+
+  /**
+   * Scope annotator for retrieving scopes created in Pass 1.
+   *
+   * <p>Pass 1 (SymbolTableBuilder) annotates parse tree nodes with their scopes. Pass 2 (this
+   * visitor) retrieves these annotations to enter the correct scopes.
+   */
+  private final ScopeAnnotator scopeAnnotator;
+
+  /**
+   * Token stream for accessing keyword positions.
+   *
+   * <p>Used in {@link #visitIfExpCS} to determine which expressions belong to condition,
+   * then-branch, and else-branch based on keyword positions.
+   */
+  private org.antlr.v4.runtime.TokenStream tokens;
+
+  // ==================== Constructor ====================
+
+  /**
+   * Constructs a TypeCheckVisitor for Phase 2 of the compilation pipeline.
+   *
+   * @param symbolTable The symbol table containing variable and type definitions from Phase 1
+   * @param wrapper The metamodel wrapper providing access to ECore metamodel information
+   * @param errors The error collector for reporting type errors
+   * @param scopeAnnotator The scope annotator containing scope annotations from Phase 1
+   */
+  public TypeCheckVisitor(
+      SymbolTable symbolTable,
+      MetamodelWrapperInterface wrapper,
+      ErrorCollector errors,
+      ScopeAnnotator scopeAnnotator) {
+    super(symbolTable, wrapper, errors);
+    this.symbolTable = symbolTable;
+    this.scopeAnnotator = scopeAnnotator;
+  }
+
+  // ==================== Error Reporting ====================
+
+  /**
+   * Handles undefined symbol errors.
+   *
+   * <p>Currently throws {@link UnsupportedOperationException} - should be implemented to report
+   * errors properly.
+   *
+   * @param name The undefined symbol name
+   * @param ctx The parse tree context where the error occurred
+   * @throws UnsupportedOperationException Always (not yet implemented)
+   */
+  @Override
+  protected void handleUndefinedSymbol(String name, ParserRuleContext ctx) {
+    errors.add(
+        ctx.getStart().getLine(),
+        ctx.getStart().getCharPositionInLine(),
+        "Undefined variable: " + name,
+        ErrorSeverity.ERROR,
+        "type-checker");
+  }
+
+  // ==================== Context Declaration ====================
+
+  /**
+   * Type checks the top-level context declaration.
+   *
+   * <p>Processes all classifier contexts (e.g., {@code context Person}, {@code context Company})
+   * and returns the type of the last one.
+   *
+   * @param ctx The context declaration node
+   * @return The type of the last classifier context
+   */
+  @Override
+  public Type visitContextDeclCS(OCLParser.ContextDeclCSContext ctx) {
+    Type lastType = Type.ERROR;
+
+    for (OCLParser.ClassifierContextCSContext classifierCtx : ctx.classifierContextCS()) {
+      lastType = visit(classifierCtx);
+    }
+
+    nodeTypes.put(ctx, lastType);
+    return lastType;
+  }
+
+  /**
+   * Type checks a classifier context declaration.
+   *
+   * <p>A classifier context binds constraints to a metaclass type. This method:
+   *
+   * <ol>
+   *   <li>Resolves the context type (qualified or unqualified name)
+   *   <li>Creates a new scope for the context
+   *   <li>Binds {@code self} to the context type
+   *   <li>Type checks all invariants within this scope
+   * </ol>
+   *
+   * <p><b>Example:</b>
+   *
+   * <pre>{@code
+   * context Person inv:           // Unqualified
+   *   self.age >= 0
+   *
+   * context model::Employee inv:  // Qualified
+   *   self.salary > 0
+   * }</pre>
+   *
+   * @param ctx The classifier context node
+   * @return The context type (metaclass type)
+   */
+  /**
+   * Type checks a classifier context declaration.
+   *
+   * <p>Enters the scope created by Pass 1 (SymbolTableBuilder) which already contains the 'self'
+   * variable.
+   */
+  @Override
+  public Type visitClassifierContextCS(OCLParser.ClassifierContextCSContext ctx) {
+    // Resolve context type (qualified or unqualified)
+    Type contextType;
+    if (ctx.metamodel != null && ctx.className != null) {
+      // Qualified: metamodel::ClassName
+      String qualifiedName = ctx.metamodel.getText() + "::" + ctx.className.getText();
+      contextType = symbolTable.lookupType(qualifiedName);
+    } else if (ctx.contextName != null) {
+      // Unqualified: ClassName
+      contextType = symbolTable.lookupType(ctx.contextName.getText());
+    } else {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Invalid context declaration",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    if (contextType == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Unknown context type",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, contextType);
+
+    // Enter scope created by Pass 1 - scope already contains 'self' variable
+    Scope contextScope = scopeAnnotator.getScope(ctx);
+    if (contextScope == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Internal error: No scope annotation from Pass 1",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    symbolTable.enterScope(contextScope);
+
+    try {
+      // Type-check all invariants
+      for (OCLParser.InvCSContext inv : ctx.invCS()) {
+        visit(inv);
+      }
+      return contextType;
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Type checks an invariant constraint.
+   *
+   * <p>Invariants must evaluate to Boolean type. This method checks all specification expressions
+   * and validates that they are conformant to Boolean.
+   *
+   * <p><b>Example:</b>
+   *
+   * <pre>{@code
+   * inv: self.age >= 0        // Must be Boolean
+   * inv: self.name.size() > 0 // Must be Boolean
+   * }</pre>
+   *
+   * @param ctx The invariant node
+   * @return Type.BOOLEAN if valid, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitInvCS(OCLParser.InvCSContext ctx) {
+    List<OCLParser.SpecificationCSContext> specs = ctx.specificationCS();
+    Type resultType = Type.BOOLEAN;
+
+    for (OCLParser.SpecificationCSContext spec : specs) {
+      Type specType = visit(spec);
+
+      // Check Boolean conformance (handles both Boolean and !Boolean!)
+      if (!specType.isConformantTo(Type.BOOLEAN) && !specType.equals(Type.ERROR)) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Invariant must be Boolean, got " + specType,
+            ErrorSeverity.ERROR,
+            "type-checker");
+        resultType = Type.ERROR;
+      }
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  // ==================== Type Expressions ====================
+
+  /**
+   * Type checks a type expression.
+   *
+   * <p>Type expressions represent types in declarations and type operations. Delegates to either
+   * type name or type literal checking.
+   *
+   * @param ctx The type expression node
+   * @return The resolved type
+   */
+  @Override
+  public Type visitTypeExpCS(OCLParser.TypeExpCSContext ctx) {
+    if (ctx.typeNameExpCS() != null) {
+      return visitTypeNameExpCS(ctx.typeNameExpCS());
+    }
+    if (ctx.typeLiteralCS() != null) {
+      return visitTypeLiteralCS(ctx.typeLiteralCS());
+    }
+
+    errors.add(
+        ctx.getStart().getLine(),
+        ctx.getStart().getCharPositionInLine(),
+        "Invalid type expression",
+        ErrorSeverity.ERROR,
+        "type-checker");
+    return Type.ERROR;
+  }
+
+  /**
+   * Type checks a type literal (primitive or collection type).
+   *
+   * @param ctx The type literal node
+   * @return The resolved type
+   */
+  @Override
+  public Type visitTypeLiteralCS(OCLParser.TypeLiteralCSContext ctx) {
+    if (ctx.primitiveTypeCS() != null) {
+      return visitPrimitiveTypeCS(ctx.primitiveTypeCS());
+    }
+    if (ctx.collectionTypeCS() != null) {
+      return visit(ctx.collectionTypeCS());
+    }
+
+    errors.add(
+        ctx.getStart().getLine(),
+        ctx.getStart().getCharPositionInLine(),
+        "Invalid type literal",
+        ErrorSeverity.ERROR,
+        "type-checker");
+    return Type.ERROR;
+  }
+
+  /**
+   * Type checks a collection type declaration.
+   *
+   * <p>Constructs collection types from their syntax. Supports:
+   *
+   * <ul>
+   *   <li>{@code Set(T)} - unordered, unique
+   *   <li>{@code Bag(T)} - unordered, non-unique
+   *   <li>{@code Sequence(T)} - ordered, non-unique
+   *   <li>{@code OrderedSet(T)} - ordered, unique
+   *   <li>{@code Collection(T)} - generic (defaults to Set)
+   * </ul>
+   *
+   * <p><b>Example:</b> {@code Set(Integer)}, {@code Sequence(Person)}
+   *
+   * @param ctx The collection type node
+   * @return The constructed collection type
+   */
+  @Override
+  public Type visitCollectionTypeCS(OCLParser.CollectionTypeCSContext ctx) {
+    String kind = ctx.collectionKind.getText();
+
+    // Get element type if specified
+    Type elementType = Type.ANY; // Default placeholder
+    if (ctx.typeExpCS() != null) {
+      elementType = visit(ctx.typeExpCS());
+      if (elementType == Type.ERROR) {
+        return Type.ERROR;
+      }
+    }
+
+    Type collectionType =
+        switch (kind) {
+          case "Set" -> Type.set(elementType);
+          case "Sequence" -> Type.sequence(elementType);
+          case "Bag" -> Type.bag(elementType);
+          case "OrderedSet" -> Type.orderedSet(elementType);
+          case "Collection" -> Type.set(elementType); // Generic → Set
+          default -> {
+            errors.add(
+                ctx.getStart().getLine(),
+                ctx.getStart().getCharPositionInLine(),
+                "Unknown collection type: " + kind,
+                ErrorSeverity.ERROR,
+                "type-checker");
+            yield Type.ERROR;
+          }
+        };
+
+    nodeTypes.put(ctx, collectionType);
+    return collectionType;
+  }
+
+  /**
+   * Handles collection type identifiers (lexical tokens).
+   *
+   * <p>Not used for actual type construction - parent {@link #visitCollectionTypeCS} handles that.
+   *
+   * @param ctx The collection type identifier node
+   * @return Type.ANY (placeholder)
+   */
+  @Override
+  public Type visitCollectionTypeIdentifier(OCLParser.CollectionTypeIdentifierContext ctx) {
+    return Type.ANY; // Placeholder, not used
+  }
+
+  /**
+   * Type checks a primitive type reference.
+   *
+   * <p>Maps OCL primitive type names to internal {@link Type} constants:
+   *
+   * <ul>
+   *   <li>Boolean → {@link Type#BOOLEAN}
+   *   <li>Integer → {@link Type#INTEGER}
+   *   <li>Real → {@link Type#DOUBLE}
+   *   <li>String → {@link Type#STRING}
+   *   <li>ID → {@link Type#STRING} (mapped)
+   *   <li>UnlimitedNatural → {@link Type#INTEGER} (mapped)
+   *   <li>OclAny → {@link Type#ANY}
+   * </ul>
+   *
+   * @param ctx The primitive type node
+   * @return The corresponding primitive type
+   */
+  @Override
+  public Type visitPrimitiveTypeCS(OCLParser.PrimitiveTypeCSContext ctx) {
+    String typeName = ctx.getText();
+
+    Type primitiveType =
+        switch (typeName) {
+          case "Boolean" -> Type.BOOLEAN;
+          case "Integer" -> Type.INTEGER;
+          case "Real" -> Type.DOUBLE;
+          case "String" -> Type.STRING;
+          case "ID" -> Type.STRING; // Map to String
+          case "UnlimitedNatural" -> Type.INTEGER; // Map to Integer
+          case "OclAny" -> Type.ANY;
+          default -> null;
+        };
+
+    if (primitiveType == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Unknown primitive type: " + typeName,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, primitiveType);
+    return primitiveType;
+  }
+
+  /**
+   * Type checks a type name expression (qualified or unqualified).
+   *
+   * <p>Resolves type names to their corresponding types. Handles:
+   *
+   * <ul>
+   *   <li>Primitive types: Integer, String, Boolean, Real
+   *   <li>Metamodel types (qualified): {@code metamodel::ClassName}
+   *   <li>Metamodel types (unqualified): {@code ClassName}
+   * </ul>
+   *
+   * <p><b>Examples:</b>
+   *
+   * <ul>
+   *   <li>{@code Integer} → Type.INTEGER
+   *   <li>{@code Person} → metaclass type for Person
+   *   <li>{@code company::Employee} → metaclass type for Employee
+   * </ul>
+   *
+   * @param ctx The type name expression node
+   * @return The resolved type
+   */
+  @Override
+  public Type visitTypeNameExpCS(OCLParser.TypeNameExpCSContext ctx) {
+    String typeName;
+
+    if (ctx.metamodel != null && ctx.className != null) {
+      typeName = ctx.metamodel.getText() + "::" + ctx.className.getText();
+    } else if (ctx.unqualified != null) {
+      typeName = ctx.unqualified.getText();
+    } else {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Invalid type name",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Check primitives first
+    Type primitiveType =
+        switch (typeName) {
+          case "Integer" -> Type.INTEGER;
+          case "String" -> Type.STRING;
+          case "Boolean" -> Type.BOOLEAN;
+          case "Real", "Double" -> Type.DOUBLE;
+          case "OclAny" -> Type.ANY;
+          default -> null;
+        };
+
+    if (primitiveType != null) {
+      nodeTypes.put(ctx, primitiveType);
+      return primitiveType;
+    }
+
+    // Lookup in symbol table (metamodel types)
+    Type resolvedType = symbolTable.lookupType(typeName);
+    if (resolvedType == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Unknown type: " + typeName,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, resolvedType);
+    return resolvedType;
+  }
+
+  // ==================== Specifications & Expressions ====================
+
+  /**
+   * Type checks a specification (OCL constraint body).
+   *
+   * <p>Evaluates all expressions in sequence and returns the type of the last one.
+   *
+   * @param ctx The specification node
+   * @return The type of the last expression
+   */
+  @Override
+  public Type visitSpecificationCS(OCLParser.SpecificationCSContext ctx) {
+    if (ctx.expCS().isEmpty()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Empty specification",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type resultType = null;
+    for (OCLParser.ExpCSContext exp : ctx.expCS()) {
+      resultType = visit(exp);
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Delegates expression type checking to infixed expression.
+   *
+   * @param ctx The expression node
+   * @return The expression type
+   */
+  @Override
+  public Type visitExpCS(OCLParser.ExpCSContext ctx) {
+    return visit(ctx.infixedExpCS());
+  }
+
+  // ==================== Comparison Operations ====================
+
+  /**
+   * Type checks equality comparison (==).
+   *
+   * <p>Validates that operands are comparable (same type or one conforms to the other).
+   *
+   * <p><b>Example:</b> {@code 5 == 10} → Boolean
+   *
+   * @param ctx The equality comparison operation node
+   * @return Type.BOOLEAN if operands are comparable, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitEqualityComparison(OCLParser.EqualityComparisonContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+    Type resultType = Type.BOOLEAN;
+
+    // Check if types are comparable
+    if (!areComparable(leftType, rightType)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Cannot compare incompatible types: " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      resultType = Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks inequality comparison (!=).
+   *
+   * <p>Validates that operands are comparable (same type or one conforms to the other).
+   *
+   * <p><b>Example:</b> {@code "hello" != "world"} → Boolean
+   *
+   * @param ctx The inequality comparison operation node
+   * @return Type.BOOLEAN if operands are comparable, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitInequalityComparison(OCLParser.InequalityComparisonContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+    Type resultType = Type.BOOLEAN;
+
+    // Check if types are comparable
+    if (!areComparable(leftType, rightType)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Cannot compare incompatible types: " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      resultType = Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks less-than comparison (<).
+   *
+   * <p>Validates that operands are comparable (same type or one conforms to the other).
+   *
+   * <p><b>Example:</b> {@code 5 < 10} → Boolean
+   *
+   * @param ctx The less-than comparison operation node
+   * @return Type.BOOLEAN if operands are comparable, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitLessThanComparison(OCLParser.LessThanComparisonContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+    Type resultType = Type.BOOLEAN;
+
+    // Check if types are comparable
+    if (!areComparable(leftType, rightType)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Cannot compare incompatible types: " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      resultType = Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks less-than-or-equal comparison (<=).
+   *
+   * <p>Validates that operands are comparable (same type or one conforms to the other).
+   *
+   * <p><b>Example:</b> {@code 5 <= 10} → Boolean
+   *
+   * @param ctx The less-than-or-equal comparison operation node
+   * @return Type.BOOLEAN if operands are comparable, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitLessThanOrEqualComparison(OCLParser.LessThanOrEqualComparisonContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+    Type resultType = Type.BOOLEAN;
+
+    // Check if types are comparable
+    if (!areComparable(leftType, rightType)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Cannot compare incompatible types: " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      resultType = Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks greater-than comparison (>).
+   *
+   * <p>Validates that operands are comparable (same type or one conforms to the other).
+   *
+   * <p><b>Example:</b> {@code 10 > 5} → Boolean
+   *
+   * @param ctx The greater-than comparison operation node
+   * @return Type.BOOLEAN if operands are comparable, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitGreaterThanComparison(OCLParser.GreaterThanComparisonContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+    Type resultType = Type.BOOLEAN;
+
+    // Check if types are comparable
+    if (!areComparable(leftType, rightType)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Cannot compare incompatible types: " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      resultType = Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks greater-than-or-equal comparison (>=).
+   *
+   * <p>Validates that operands are comparable (same type or one conforms to the other).
+   *
+   * <p><b>Example:</b> {@code 10 >= 5} → Boolean
+   *
+   * @param ctx The greater-than-or-equal comparison operation node
+   * @return Type.BOOLEAN if operands are comparable, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitGreaterThanOrEqualComparison(OCLParser.GreaterThanOrEqualComparisonContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+    Type resultType = Type.BOOLEAN;
+
+    // Check if types are comparable
+    if (!areComparable(leftType, rightType)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Cannot compare incompatible types: " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      resultType = Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Checks if two types are comparable.
+   *
+   * <p>Types are comparable if:
+   *
+   * <ul>
+   *   <li>Either is Type.ERROR (error already reported)
+   *   <li>They are equal
+   *   <li>One conforms to the other (subtype relationship)
+   * </ul>
+   *
+   * @param t1 First type
+   * @param t2 Second type
+   * @return true if types are comparable
+   */
+  private boolean areComparable(Type t1, Type t2) {
+    if (t1 == Type.ERROR || t2 == Type.ERROR) return true;
+    if (t1.equals(t2)) return true;
+    if (t1.isConformantTo(t2) || t2.isConformantTo(t1)) return true;
+    return false;
+  }
+
+  // ==================== Arithmetic Operations ====================
+
+  /**
+   * Type checks multiplicative operations (* and /).
+   *
+   * <p>Uses {@link TypeResolver#resolveBinaryOp} to determine result type based on operand types.
+   *
+   * <p><b>Examples:</b>
+   *
+   * <ul>
+   *   <li>{@code 6 * 7} → Integer
+   *   <li>{@code 10 / 2} → Integer
+   * </ul>
+   *
+   * @param ctx The multiplicative operation node
+   * @return The result type (typically Integer)
+   */
+  @Override
+  public Type visitMultiplicative(OCLParser.MultiplicativeContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+
+    String operator = ctx.op.getText();
+    Type resultType = TypeResolver.resolveBinaryOp(operator, leftType, rightType);
+
+    if (resultType == Type.ERROR) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Type mismatch: cannot apply '" + operator + "' to " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks additive operations (+ and -).
+   *
+   * <p>Uses {@link TypeResolver#resolveBinaryOp} to determine result type.
+   *
+   * <p><b>Examples:</b>
+   *
+   * <ul>
+   *   <li>{@code 3 + 4} → Integer
+   *   <li>{@code 10 - 3} → Integer
+   * </ul>
+   *
+   * @param ctx The additive operation node
+   * @return The result type (typically Integer)
+   */
+  @Override
+  public Type visitAdditive(OCLParser.AdditiveContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+
+    String operator = ctx.op.getText();
+    Type resultType = TypeResolver.resolveBinaryOp(operator, leftType, rightType);
+
+    if (resultType == Type.ERROR) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Type mismatch: cannot apply '" + operator + "' to " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  // ==================== Logical Operations ====================
+
+  /**
+   * Type checks logical AND operation.
+   *
+   * <p>Uses {@link TypeResolver#resolveBinaryOp} to validate Boolean operands and return Boolean
+   * result.
+   *
+   * <p><b>Example:</b> {@code true and false} → Boolean
+   *
+   * @param ctx The logical AND operation node
+   * @return Type.BOOLEAN if operands are Boolean, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitLogicalAnd(OCLParser.LogicalAndContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+
+    String operator = "and";
+    Type resultType = TypeResolver.resolveBinaryOp(operator, leftType, rightType);
+
+    if (resultType == Type.ERROR) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Type mismatch: cannot apply '" + operator + "' to " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks logical OR operation.
+   *
+   * <p>Uses {@link TypeResolver#resolveBinaryOp} to validate Boolean operands and return Boolean
+   * result.
+   *
+   * <p><b>Example:</b> {@code true or false} → Boolean
+   *
+   * @param ctx The logical OR operation node
+   * @return Type.BOOLEAN if operands are Boolean, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitLogicalOr(OCLParser.LogicalOrContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+
+    String operator = "or";
+    Type resultType = TypeResolver.resolveBinaryOp(operator, leftType, rightType);
+
+    if (resultType == Type.ERROR) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Type mismatch: cannot apply '" + operator + "' to " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks logical XOR operation.
+   *
+   * <p>Uses {@link TypeResolver#resolveBinaryOp} to validate Boolean operands and return Boolean
+   * result.
+   *
+   * <p><b>Example:</b> {@code true xor true} → Boolean
+   *
+   * @param ctx The logical XOR operation node
+   * @return Type.BOOLEAN if operands are Boolean, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitLogicalXor(OCLParser.LogicalXorContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+
+    String operator = "xor";
+    Type resultType = TypeResolver.resolveBinaryOp(operator, leftType, rightType);
+
+    if (resultType == Type.ERROR) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Type mismatch: cannot apply '" + operator + "' to " + leftType + " and " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks the implication operation (implies).
+   *
+   * <p>Both operands must be Boolean. Returns Boolean.
+   *
+   * <p><b>Example:</b> {@code age >= 18 implies canVote == true} → Boolean
+   *
+   * @param ctx The implication operation node
+   * @return Type.BOOLEAN if both operands are Boolean
+   */
+  @Override
+  public Type visitImplication(OCLParser.ImplicationContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+
+    if (!leftType.isConformantTo(Type.BOOLEAN)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Left operand of 'implies' must be Boolean, got " + leftType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    if (!rightType.isConformantTo(Type.BOOLEAN)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Right operand of 'implies' must be Boolean, got " + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, Type.BOOLEAN);
+    return Type.BOOLEAN;
+  }
+
+  // ==================== Unary Operations & Navigation ====================
+
+  /**
+   * Visits a primary expression with navigation (`primaryWithNav`) in the AST.
+   *
+   * <p>This method performs type checking for a primary expression that may be followed by a chain
+   * of navigation operations (e.g., property or association accesses).
+   *
+   * @param ctx the context of the primary expression with navigation in the AST
+   * @return the resulting type of the expression after applying the navigation chain; {@link
+   *     Type#ERROR} if the base expression has no type
+   */
+  @Override
+  public Type visitPrimaryWithNav(OCLParser.PrimaryWithNavContext ctx) {
+    // Get base type from primary expression
+    Type currentType = visit(ctx.base);
+
+    if (currentType == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Base expression has no type",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Process navigation chain using receiverStack
+    List<OCLParser.NavigationChainCSContext> navChain = ctx.navigationChainCS();
+    receiverStack.push(currentType);
+    for (OCLParser.NavigationChainCSContext nav : navChain) {
+      Type resultType = visit(nav);
+      receiverStack.pop();
+      receiverStack.push(resultType);
+      currentType = resultType;
+    }
+    if (!navChain.isEmpty()) {
+      receiverStack.pop();
+    }
+
+    nodeTypes.put(ctx, currentType);
+    return currentType;
+  }
+
+  /**
+   * Visits a unary minus (`-`) node in the AST.
+   *
+   * <p>This method performs type checking for the operand of the unary minus. It supports both
+   * scalar and collection types (one level of unwrapping):
+   *
+   * <ul>
+   *   <li>If the operand is a singleton or a collection, the base element type is extracted.
+   *   <li>Allowed base types are {@link Type#INTEGER} and {@link Type#DOUBLE}.
+   *   <li>If the type is invalid, an error is added to the error list and {@link Type#ERROR} is
+   *       returned.
+   * </ul>
+   *
+   * The type of the operand is stored in the {@code nodeTypes} map.
+   *
+   * @param ctx the context of the unary minus node in the AST
+   * @return the type of the operand if valid; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitUnaryMinus(OCLParser.UnaryMinusContext ctx) {
+    Type operandType = visit(ctx.operand);
+
+    // Unwrap one level
+    Type baseType = operandType;
+    if (baseType.isSingleton() || baseType.isCollection()) {
+      baseType = baseType.getElementType();
+    }
+
+    if (baseType != Type.INTEGER && baseType != Type.DOUBLE && baseType != Type.ERROR) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Unary minus requires numeric type, got " + operandType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, operandType);
+    return operandType;
+  }
+
+  /**
+   * Visits a logical NOT (`not`) node in the AST.
+   *
+   * <p>This method performs type checking for the operand of a logical NOT expression. It supports
+   * both scalar and collection types (one level of unwrapping):
+   *
+   * <ul>
+   *   <li>If the operand is a singleton or a collection, the base element type is extracted.
+   *   <li>Allowed base type is {@link Type#BOOLEAN}.
+   *   <li>If the type is invalid, an error is added to the error list and {@link Type#ERROR} is
+   *       returned.
+   * </ul>
+   *
+   * The type of the operand is stored in the {@code nodeTypes} map.
+   *
+   * @param ctx the context of the logical NOT node in the AST
+   * @return the type of the operand if valid; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitLogicalNot(OCLParser.LogicalNotContext ctx) {
+    Type operandType = visit(ctx.operand);
+
+    // Unwrap one level only
+    Type baseType = operandType;
+    if (baseType.isSingleton() || baseType.isCollection()) {
+      baseType = baseType.getElementType();
+    }
+
+    if (baseType != Type.BOOLEAN && baseType != Type.ERROR) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Logical not requires Boolean type, got " + operandType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, operandType);
+    return operandType;
+  }
+
+  // ==================== Cross-Metamodel Support ====================
+
+  /**
+   * Type checks fully qualified metaclass references.
+   *
+   * <p>Resolves qualified names like {@code spaceMission::Spacecraft} to their corresponding
+   * metaclass types and handles navigation chains (typically {@code .allInstances()}).
+   *
+   * <p><b>Example:</b> {@code satelliteSystem::Satellite.allInstances()} → Set(Satellite)
+   *
+   * @param ctx The prefixed qualified name node
+   * @return The result type after navigation
+   */
+  @Override
+  public Type visitPrefixedQualified(OCLParser.PrefixedQualifiedContext ctx) {
+    String metamodel = ctx.metamodel.getText();
+    String className = ctx.className.getText();
+
+    EClass eClass = specification.resolveEClass(metamodel, className);
+    if (eClass == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Cannot resolve " + metamodel + "::" + className,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type metaclassType = Type.metaclassType(eClass);
+
+    // Store the base type BEFORE navigation
+    nodeTypes.put(ctx, metaclassType);
+
+    // Process navigation chain (e.g., .allInstances())
+    receiverStack.push(metaclassType);
+    Type currentType = metaclassType;
+    for (OCLParser.NavigationChainCSContext nav : ctx.navigationChainCS()) {
+      currentType = visit(nav);
+      nodeTypes.put(nav, currentType);
+      receiverStack.pop();
+      receiverStack.push(currentType);
+    }
+    if (!ctx.navigationChainCS().isEmpty()) {
+      receiverStack.pop();
+    }
+
+    return currentType;
+  }
+
+  // ==================== Navigation ====================
+
+  /**
+   * Delegates navigation chain type checking to navigation target.
+   *
+   * @param ctx The navigation chain node
+   * @return The navigation result type
+   */
+  @Override
+  public Type visitNavigationChainCS(OCLParser.NavigationChainCSContext ctx) {
+    return visit(ctx.navigationTargetCS());
+  }
+
+  /**
+   * Type checks property navigation.
+   *
+   * <p>Accesses a property on the receiver type from the receiverStack.
+   *
+   * @param ctx The property navigation node
+   * @return The property type
+   */
+  @Override
+  public Type visitPropertyNav(OCLParser.PropertyNavContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    // Unwrap singleton for property access (OCL# compatibility)
+    if (receiverType.getMultiplicity() == Multiplicity.SINGLETON) {
+      receiverType = receiverType.getElementType();
+    }
+
+    String propertyName = ctx.propertyAccess().propertyName.getText();
+
+    Type resultType = typeCheckPropertyAccess(receiverType, propertyName, ctx);
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks operation navigation.
+   *
+   * <p>Delegates to the specific operation call visitor.
+   *
+   * @param ctx The operation navigation node
+   * @return The operation result type
+   */
+  @Override
+  public Type visitOperationNav(OCLParser.OperationNavContext ctx) {
+    return visit(ctx.operationCall());
+  }
+
+  /**
+   * Type checks property access on a receiver.
+   *
+   * <p>Handles both singleton and collection receivers:
+   *
+   * <ul>
+   *   <li><b>Singleton:</b> {@code person.name} → direct property access
+   *   <li><b>Collection:</b> {@code companies.name} → implicit collect, returns flattened
+   *       collection
+   * </ul>
+   *
+   * @param receiverType The type of the receiver
+   * @param propName The property name
+   * @param ctx The parse tree context for error reporting
+   * @return The property type (may be wrapped in collection)
+   */
+  private Type typeCheckPropertyAccess(Type receiverType, String propName, ParserRuleContext ctx) {
+    // Implicit collect for collections
+    if (receiverType.isCollection()) {
+      Type elemType = receiverType.getElementType();
+
+      if (!elemType.isMetaclassType()) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Cannot navigate on non-object type",
+            ErrorSeverity.ERROR,
+            "type-checker");
+        return Type.ERROR;
+      }
+
+      EClass eClass = elemType.getEClass();
+      EStructuralFeature feature = eClass.getEStructuralFeature(propName);
+
+      if (feature == null) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Unknown property: " + propName,
+            ErrorSeverity.ERROR,
+            "type-checker");
+        return Type.ERROR;
+      }
+
+      Type featureType = mapFeatureToType(feature);
+      return Type.set(featureType.getElementType()); // Flatten
+    }
+
+    // Singleton property access
+    if (receiverType.isMetaclassType()) {
+      EClass eClass = receiverType.getEClass();
+      EStructuralFeature feature = eClass.getEStructuralFeature(propName);
+
+      if (feature == null) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Unknown property: " + propName,
+            ErrorSeverity.ERROR,
+            "type-checker");
+        return Type.ERROR;
+      }
+
+      return mapFeatureToType(feature);
+    }
+
+    errors.add(
+        ctx.getStart().getLine(),
+        ctx.getStart().getCharPositionInLine(),
+        "Cannot access property on " + receiverType,
+        ErrorSeverity.ERROR,
+        "type-checker");
+    return Type.ERROR;
+  }
+
+  /**
+   * Maps an EMF structural feature to a VitruvOCL type.
+   *
+   * <p>Handles:
+   *
+   * <ul>
+   *   <li>Multi-valued features (upper bound > 1 or -1) → Set type
+   *   <li>Single-valued features → Singleton type
+   * </ul>
+   *
+   * @param feature The EMF structural feature
+   * @return The corresponding VitruvOCL type
+   */
+  private Type mapFeatureToType(EStructuralFeature feature) {
+    Type baseType = mapEClassifierToType(feature.getEType());
+
+    if (feature.getUpperBound() > 1 || feature.getUpperBound() == -1) {
+      return Type.set(baseType);
+    } else {
+      return Type.singleton(baseType);
+    }
+  }
+
+  /**
+   * Maps an EMF EClassifier to a VitruvOCL type.
+   *
+   * <p>Handles:
+   *
+   * <ul>
+   *   <li>EString → Type.STRING
+   *   <li>EInt → Type.INTEGER
+   *   <li>EBoolean → Type.BOOLEAN
+   *   <li>EClass → metaclass type
+   * </ul>
+   *
+   * @param classifier The EMF classifier
+   * @return The corresponding VitruvOCL type
+   */
+  private Type mapEClassifierToType(EClassifier classifier) {
+    // Handle primitive types
+    switch (classifier.getName()) {
+      case "EString":
+        return Type.STRING;
+      case "EInt":
+        return Type.INTEGER;
+      case "EBoolean":
+        return Type.BOOLEAN;
+      default:
+        if (EcorePackage.Literals.ECLASS.equals(classifier.eClass())) {
+          return Type.metaclassType((EClass) classifier);
+        }
+        return Type.ERROR;
+    }
+  }
+
+  // ==================== Control Flow ====================
+
+  /**
+   * Type checks if-then-else expressions.
+   *
+   * <p>Validates:
+   *
+   * <ol>
+   *   <li>Condition must be Boolean
+   *   <li>Then and else branches must have compatible types
+   * </ol>
+   *
+   * <p>Result type is the common supertype of both branches.
+   *
+   * <p><b>Example:</b>
+   *
+   * <pre>{@code
+   * if age >= 18 then 'adult' else 'minor' endif  // → String
+   * if condition then 1 else 2.0 endif            // → Real (common supertype)
+   * }</pre>
+   *
+   * @param ctx The if-expression node
+   * @return The common supertype of both branches
+   */
+  @Override
+  public Type visitIfExpCS(OCLParser.IfExpCSContext ctx) {
+    List<OCLParser.ExpCSContext> allExps = ctx.expCS();
+
+    int thenIndex = findKeywordIndex(ctx, "then");
+    int elseIndex = findKeywordIndex(ctx, "else");
+
+    List<OCLParser.ExpCSContext> condExps = new ArrayList<>();
+    List<OCLParser.ExpCSContext> thenExps = new ArrayList<>();
+    List<OCLParser.ExpCSContext> elseExps = new ArrayList<>();
+
+    for (OCLParser.ExpCSContext exp : allExps) {
+      int expIndex = exp.getStart().getTokenIndex();
+
+      if (expIndex < thenIndex) {
+        condExps.add(exp);
+      } else if (expIndex < elseIndex) {
+        thenExps.add(exp);
+      } else {
+        elseExps.add(exp);
+      }
+    }
+
+    // Type-check condition
+    Type condType = null;
+    for (OCLParser.ExpCSContext exp : condExps) {
+      condType = visit(exp);
+    }
+    if (condType != null
+        && condType.getElementType() != Type.BOOLEAN
+        && !condType.isConformantTo(Type.BOOLEAN)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "If condition must be Boolean",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    // Type-check then-branch
+    Type thenType = null;
+    for (OCLParser.ExpCSContext exp : thenExps) {
+      thenType = visit(exp);
+    }
+
+    // Type-check else-branch
+    Type elseType = null;
+    for (OCLParser.ExpCSContext exp : elseExps) {
+      elseType = visit(exp);
+    }
+
+    if (thenType == null || elseType == null) {
+      return Type.ERROR;
+    }
+
+    // Determine result type
+    // Determine result type (common supertype of branches)
+    Type resultType;
+    if (thenType.equals(elseType)) {
+      resultType = thenType;
+    } else if (thenType.isConformantTo(elseType)) {
+      resultType = elseType;
+    } else if (elseType.isConformantTo(thenType)) {
+      resultType = thenType;
+    } else {
+      resultType = Type.commonSuperType(thenType, elseType);
+      // ADD THIS CHECK:
+      if (resultType == Type.ANY || resultType == null) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Incompatible branch types: " + thenType + " and " + elseType,
+            ErrorSeverity.ERROR,
+            "type-checker");
+        resultType = Type.ERROR;
+      }
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Helper method to find keyword token index in if-expression.
+   *
+   * @param ctx The if-expression context
+   * @param keyword The keyword to find ("then" or "else")
+   * @return The token index, or Integer.MAX_VALUE if not found
+   */
+  private int findKeywordIndex(ParserRuleContext ctx, String keyword) {
+    for (int i = 0; i < ctx.getChildCount(); i++) {
+      ParseTree child = ctx.getChild(i);
+      if (child instanceof TerminalNode) {
+        if (child.getText().equals(keyword)) {
+          return ((TerminalNode) child).getSymbol().getTokenIndex();
+        }
+      }
+    }
+    return Integer.MAX_VALUE;
+  }
+
+  /**
+   * Type checks let-expressions with variable bindings.
+   *
+   * <p>Creates a new scope, defines variables, and type-checks the body expression.
+   *
+   * <p><b>Example:</b>
+   *
+   * <pre>{@code
+   * let x = 5, y = 'hello' in x + y.size()  // → Integer
+   * }</pre>
+   *
+   * @param ctx The let-expression node
+   * @return The type of the body expression
+   */
+  @Override
+  public Type visitLetExpCS(OCLParser.LetExpCSContext ctx) {
+    // Enter scope created by Pass 1 - variables already defined
+    Scope letScope = scopeAnnotator.getScope(ctx);
+    if (letScope == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Internal error: No scope annotation from Pass 1",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    symbolTable.enterScope(letScope);
+
+    try {
+      // Type-check variable declarations (validates type conformance only)
+      visit(ctx.variableDeclarations());
+
+      // Type-check body expressions
+      List<OCLParser.ExpCSContext> allExps = ctx.expCS();
+      Type bodyType = null;
+      for (OCLParser.ExpCSContext exp : allExps) {
+        bodyType = visit(exp);
+      }
+
+      if (bodyType == null) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Let body empty",
+            ErrorSeverity.ERROR,
+            "type-checker");
+        bodyType = Type.ERROR;
+      }
+
+      nodeTypes.put(ctx, bodyType);
+      return bodyType;
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Processes variable declarations (in let-expressions).
+   *
+   * @param ctx The variable declarations node
+   * @return Type.ANY (not used)
+   */
+  @Override
+  public Type visitVariableDeclarations(OCLParser.VariableDeclarationsContext ctx) {
+    for (OCLParser.VariableDeclarationContext varDecl : ctx.variableDeclaration()) {
+      visit(varDecl);
+    }
+    return Type.ANY; // Not used
+  }
+
+  /**
+   * Type checks a single variable declaration.
+   *
+   * <p>Validates:
+   *
+   * <ul>
+   *   <li>No duplicate variable names in current scope
+   *   <li>Initializer type conforms to declared type (if present)
+   * </ul>
+   *
+   * <p><b>Example:</b> {@code let x : Integer = 5} - checks that 5 conforms to Integer
+   *
+   * @param ctx The variable declaration node
+   * @return The variable type
+   */
+  @Override
+  public Type visitVariableDeclaration(OCLParser.VariableDeclarationContext ctx) {
+    String varName = ctx.varName.getText();
+
+    // Variable already defined in Pass 1 - just look it up
+    VariableSymbol symbol = symbolTable.resolveVariable(varName);
+    if (symbol == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Variable '" + varName + "' not found (Pass 1 error?)",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Type-check initializer
+    Type initType = visit(ctx.varInit);
+
+    // Check explicit type if present
+    Type declaredType = symbol.getType();
+    if (ctx.varType != null) {
+      Type explicitType = visit(ctx.varType);
+      if (!initType.isConformantTo(explicitType)) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Type mismatch: got " + initType + ", expected " + explicitType,
+            ErrorSeverity.ERROR,
+            "type-checker");
+        return Type.ERROR;
+      }
+      declaredType = explicitType;
+      // Refine type if it was ANY from Pass 1
+      if (symbol.getType() == Type.ANY) {
+        symbol.setType(declaredType);
+      }
+    } else {
+      // No explicit type - refine symbol with inferred type from initializer
+      if (declaredType == Type.ANY) {
+        symbol.setType(initType);
+        declaredType = initType;
+      } else if (!initType.isConformantTo(declaredType)) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Type mismatch: got " + initType + ", expected " + declaredType,
+            ErrorSeverity.ERROR,
+            "type-checker");
+      }
+    }
+
+    nodeTypes.put(ctx, declaredType);
+    return declaredType;
+  }
+
+  // ==================== Literal Values ====================
+
+  /**
+   * Type checks integer literals.
+   *
+   * @param ctx The number literal node
+   * @return Type.INTEGER
+   */
+  @Override
+  public Type visitNumberLit(OCLParser.NumberLitContext ctx) {
+    String text = ctx.getText();
+    Type type = text.contains(".") ? Type.DOUBLE : Type.INTEGER;
+    nodeTypes.put(ctx, type);
+    return type;
+  }
+
+  /**
+   * Type checks string literals.
+   *
+   * @param ctx The string literal node
+   * @return Type.STRING
+   */
+  @Override
+  public Type visitStringLit(OCLParser.StringLitContext ctx) {
+    nodeTypes.put(ctx, Type.STRING);
+    return Type.STRING;
+  }
+
+  /**
+   * Type checks boolean literals.
+   *
+   * @param ctx The boolean literal node
+   * @return Type.BOOLEAN
+   */
+  @Override
+  public Type visitBooleanLit(OCLParser.BooleanLitContext ctx) {
+    nodeTypes.put(ctx, Type.BOOLEAN);
+    return Type.BOOLEAN;
+  }
+
+  // ==================== Variable References ====================
+
+  /**
+   * Type checks variable references.
+   *
+   * <p>Looks up the variable in the symbol table and returns its declared type.
+   *
+   * @param ctx The variable expression node
+   * @return The variable's type
+   */
+  @Override
+  public Type visitVariableExpCS(OCLParser.VariableExpCSContext ctx) {
+    String varName = ctx.varName.getText();
+
+    VariableSymbol symbol = symbolTable.resolveVariable(varName);
+    if (symbol == null) {
+      handleUndefinedSymbol(varName, ctx);
+      nodeTypes.put(ctx, Type.ERROR);
+      return Type.ERROR;
+    }
+
+    Type varType = symbol.getType();
+    nodeTypes.put(ctx, varType);
+    return varType;
+  }
+
+  /**
+   * Type checks {@code self} references.
+   *
+   * <p>Returns the type of the special {@code self} variable from the current context.
+   *
+   * @param ctx The self expression node
+   * @return The context type (type of self)
+   */
+  @Override
+  public Type visitSelfExpCS(OCLParser.SelfExpCSContext ctx) {
+    Symbol selfSymbol = symbolTable.resolveVariable("self");
+
+    if (selfSymbol == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'self' not defined in current context",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      nodeTypes.put(ctx, Type.ERROR);
+      return Type.ERROR;
+    }
+
+    Type selfType = selfSymbol.getType();
+    nodeTypes.put(ctx, selfType);
+    return selfType;
+  }
+
+  // ==================== Collection Literals ====================
+
+  /**
+   * Type checks collection literal expressions.
+   *
+   * <p>Infers element type from collection arguments and constructs appropriate collection type.
+   *
+   * <p><b>Examples:</b>
+   *
+   * <ul>
+   *   <li>{@code Set{1,2,3}} → Set(Integer)
+   *   <li>{@code Bag{'a','b'}} → Bag(String)
+   *   <li>{@code Sequence{}} → Sequence(Any)
+   * </ul>
+   *
+   * @param ctx The collection literal node
+   * @return The inferred collection type
+   */
+  @Override
+  public Type visitCollectionLiteralExpCS(OCLParser.CollectionLiteralExpCSContext ctx) {
+    Type collectionType = visit(ctx.collectionKind);
+
+    if (collectionType == Type.ERROR) {
+      nodeTypes.put(ctx, Type.ERROR);
+      return Type.ERROR;
+    }
+
+    // Empty collection: keep ANY as element type
+    if (ctx.arguments == null) {
+      nodeTypes.put(ctx, collectionType);
+      return collectionType;
+    }
+
+    // Infer element type from arguments
+    Type inferredElementType = visit(ctx.arguments);
+
+    if (inferredElementType == Type.ERROR) {
+      nodeTypes.put(ctx, Type.ERROR);
+      return Type.ERROR;
+    }
+
+    // Create collection with inferred element type
+    Type resultType = preserveCollectionKind(collectionType, inferredElementType);
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Preserves collection kind while changing element type.
+   *
+   * <p>Maintains the collection's unique/ordered properties when creating a new collection type
+   * with a different element type.
+   *
+   * @param collectionType The original collection type
+   * @param newElementType The new element type
+   * @return A collection of the same kind with the new element type
+   */
+  private Type preserveCollectionKind(Type collectionType, Type newElementType) {
+    if (collectionType.isUnique() && collectionType.isOrdered()) {
+      return Type.orderedSet(newElementType);
+    } else if (collectionType.isUnique()) {
+      return Type.set(newElementType);
+    } else if (collectionType.isOrdered()) {
+      return Type.sequence(newElementType);
+    } else {
+      return Type.bag(newElementType);
+    }
+  }
+
+  /**
+   * Type checks collection arguments (elements in collection literal).
+   *
+   * <p>Computes the common supertype of all elements.
+   *
+   * @param ctx The collection arguments node
+   * @return The common element type
+   */
+  @Override
+  public Type visitCollectionArguments(OCLParser.CollectionArgumentsContext ctx) {
+    Type commonType = null;
+
+    for (OCLParser.CollectionLiteralPartCSContext part : ctx.collectionLiteralPartCS()) {
+      Type partType = visit(part);
+
+      if (partType == Type.ERROR) continue;
+
+      if (commonType == null) {
+        commonType = partType;
+      } else if (!partType.equals(commonType)) {
+        Type superType = Type.commonSuperType(commonType, partType);
+        commonType = (superType != null) ? superType : Type.ANY;
+      }
+    }
+
+    return (commonType != null) ? commonType : Type.ANY;
+  }
+
+  /**
+   * Type checks a collection literal part (element or range).
+   *
+   * <p>Handles:
+   *
+   * <ul>
+   *   <li>Single elements: {@code 42}
+   *   <li>Ranges: {@code 1..10} (both bounds must be Integer)
+   * </ul>
+   *
+   * @param ctx The collection literal part node
+   * @return The element type (Integer for ranges)
+   */
+  @Override
+  public Type visitCollectionLiteralPartCS(OCLParser.CollectionLiteralPartCSContext ctx) {
+    Type firstType = visit(ctx.expCS(0));
+
+    // Range: 1..10
+    if (ctx.expCS().size() == 2) {
+      Type secondType = visit(ctx.expCS(1));
+
+      if (!firstType.isConformantTo(Type.INTEGER)) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Range start must be Integer",
+            ErrorSeverity.ERROR,
+            "type-checker");
+      }
+      if (!secondType.isConformantTo(Type.INTEGER)) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Range end must be Integer",
+            ErrorSeverity.ERROR,
+            "type-checker");
+      }
+
+      return Type.INTEGER;
+    }
+
+    return firstType;
+  }
+
+  // ==================== Collection Operations ====================
+
+  /**
+   * Type checks the {@code size()} operation.
+   *
+   * <p>Requires collection receiver, returns Integer.
+   *
+   * @param ctx The size operation node
+   * @return Type.INTEGER
+   */
+  @Override
+  public Type visitSizeOp(OCLParser.SizeOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "size() requires collection receiver",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type resultType = Type.INTEGER;
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks the {@code first()} operation.
+   *
+   * @param ctx The first operation node
+   * @return Optional of element type
+   */
+  @Override
+  public Type visitFirstOp(OCLParser.FirstOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "first() requires collection receiver",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+    Type resultType = Type.singleton(receiverType.getElementType());
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks the {@code last()} operation.
+   *
+   * @param ctx The last operation node
+   * @return Optional of element type
+   */
+  @Override
+  public Type visitLastOp(OCLParser.LastOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "last() requires collection receiver",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+    // Return singleton collection instead of optional
+    Type resultType = Type.singleton(receiverType.getElementType());
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks the {@code reverse()} operation.
+   *
+   * @param ctx The reverse operation node
+   * @return Same collection type as receiver
+   */
+  @Override
+  public Type visitReverseOp(OCLParser.ReverseOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "reverse() requires collection receiver",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+    nodeTypes.put(ctx, receiverType);
+    return receiverType;
+  }
+
+  /**
+   * Type checks the {@code isEmpty()} operation.
+   *
+   * @param ctx The isEmpty operation node
+   * @return Type.BOOLEAN
+   */
+  @Override
+  public Type visitIsEmptyOp(OCLParser.IsEmptyOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "isEmpty() requires collection receiver",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+    Type resultType = Type.singleton(Type.BOOLEAN);
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks the {@code notEmpty()} operation.
+   *
+   * @param ctx The notEmpty operation node
+   * @return Type.BOOLEAN
+   */
+  @Override
+  public Type visitNotEmptyOp(OCLParser.NotEmptyOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "notEmpty() requires collection receiver",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type resultType = Type.BOOLEAN;
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks collection modification operations (including, excluding, etc.).
+   *
+   * <p>These operations validate argument type compatibility and return the receiver collection
+   * type.
+   */
+  @Override
+  public Type visitIncludingOp(OCLParser.IncludingOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+    Type argType = visit(ctx.arg);
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'including' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+    if (!argType.isConformantTo(elemType)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Incompatible argument type",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, receiverType);
+    return receiverType;
+  }
+
+  /**
+   * Visits an 'excluding' operation node in the AST.
+   *
+   * <p>This method performs type checking for the 'excluding' operation, which removes an element
+   * from a collection.
+   *
+   * <ul>
+   *   <li>The operation requires that the receiver type (top of {@code receiverStack}) is a
+   *       collection.
+   *   <li>If the receiver is not a collection, an error is added and {@link Type#ERROR} is
+   *       returned.
+   * </ul>
+   *
+   * The type of the receiver is stored in the {@code nodeTypes} map.
+   *
+   * @param ctx the context of the 'excluding' operation node in the AST
+   * @return the type of the collection receiver if valid; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitExcludingOp(OCLParser.ExcludingOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'excluding' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, receiverType);
+    return receiverType;
+  }
+
+  /**
+   * Visits an 'includes' operation node in the AST.
+   *
+   * <p>This method performs type checking for the 'includes' operation, which checks whether a
+   * collection contains a given element.
+   *
+   * <ul>
+   *   <li>The operation requires that the receiver type (top of {@code receiverStack}) is a
+   *       collection.
+   *   <li>If the receiver is not a collection, an error is added and {@link Type#ERROR} is
+   *       returned.
+   *   <li>If the type is valid, the resulting type of the operation is {@link Type#BOOLEAN}.
+   * </ul>
+   *
+   * The resulting type is stored in the {@code nodeTypes} map.
+   *
+   * @param ctx the context of the 'includes' operation node in the AST
+   * @return {@link Type#BOOLEAN} if the receiver is a collection; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitIncludesOp(OCLParser.IncludesOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'includes' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, Type.BOOLEAN);
+    return Type.BOOLEAN;
+  }
+
+  /**
+   * Visits an 'excludes' operation node in the AST.
+   *
+   * <p>This method performs type checking for the 'excludes' operation, which checks whether a
+   * collection does not contain a given element.
+   *
+   * <ul>
+   *   <li>The operation requires that the receiver type (top of {@code receiverStack}) is a
+   *       collection.
+   *   <li>If the receiver is not a collection, an error is added and {@link Type#ERROR} is
+   *       returned.
+   *   <li>If the type is valid, the resulting type of the operation is {@link Type#BOOLEAN}.
+   * </ul>
+   *
+   * The resulting type is stored in the {@code nodeTypes} map.
+   *
+   * @param ctx the context of the 'excludes' operation node in the AST
+   * @return {@link Type#BOOLEAN} if the receiver is a collection; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitExcludesOp(OCLParser.ExcludesOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'excludes' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, Type.BOOLEAN);
+    return Type.BOOLEAN;
+  }
+
+  /**
+   * Type checks the {@code flatten()} operation.
+   *
+   * <p>Requires Collection(Collection(T)), returns Collection(T).
+   *
+   * @param ctx The flatten operation node
+   * @return Flattened collection type
+   */
+  @Override
+  public Type visitFlattenOp(OCLParser.FlattenOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'flatten' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type innerType = receiverType.getElementType();
+    if (!innerType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Expected Collection(Collection(T))",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type flatElementType = innerType.getElementType();
+    Type resultType = preserveCollectionKind(receiverType, flatElementType);
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks the {@code union()} operation.
+   *
+   * <p>Combines two collections, computing result type based on collection properties.
+   *
+   * @param ctx The union operation node
+   * @return Combined collection type
+   */
+  @Override
+  public Type visitUnionOp(OCLParser.UnionOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+    Type argType = visit(ctx.arg);
+
+    if (!receiverType.isCollection() || !argType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'union' requires collection operands",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type commonElemType =
+        Type.commonSuperType(receiverType.getElementType(), argType.getElementType());
+
+    boolean bothUnique = receiverType.isUnique() && argType.isUnique();
+    boolean anyOrdered = receiverType.isOrdered() || argType.isOrdered();
+
+    Type resultType;
+    if (bothUnique && anyOrdered) {
+      resultType = Type.orderedSet(commonElemType);
+    } else if (bothUnique) {
+      resultType = Type.set(commonElemType);
+    } else if (anyOrdered) {
+      resultType = Type.sequence(commonElemType);
+    } else {
+      resultType = Type.bag(commonElemType);
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Visits an 'append' operation node in the AST.
+   *
+   * <p>This method performs type checking and result type computation for the 'append' operation,
+   * which combines two collections by adding all elements of the argument collection to the
+   * receiver collection.
+   *
+   * <p>The steps are as follows:
+   *
+   * <ol>
+   *   <li>Retrieve the receiver type from {@code receiverStack} and the argument type by visiting
+   *       {@code ctx.arg}.
+   *   <li>Check that both the receiver and argument are collections; if not, an error is added and
+   *       {@link Type#ERROR} is returned.
+   *   <li>Compute the common element type of the two collections using {@link
+   *       Type#commonSuperType}.
+   *   <li>Determine the resulting collection type based on uniqueness and ordering:
+   *       <ul>
+   *         <li>If both are unique and any is ordered → {@link Type#orderedSet}.
+   *         <li>If both are unique → {@link Type#set}.
+   *         <li>If any is ordered → {@link Type#sequence}.
+   *         <li>Otherwise → {@link Type#bag}.
+   *       </ul>
+   *   <li>The computed result type is stored in {@code nodeTypes}.
+   * </ol>
+   *
+   * @param ctx the context of the 'append' operation node in the AST
+   * @return the resulting collection type if operands are valid; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitAppendOp(OCLParser.AppendOpContext ctx) {
+    // Same logic as union
+    Type receiverType = receiverStack.peek();
+    Type argType = visit(ctx.arg);
+
+    if (!receiverType.isCollection() || !argType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'append' requires collection operands",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type commonElemType =
+        Type.commonSuperType(receiverType.getElementType(), argType.getElementType());
+    boolean bothUnique = receiverType.isUnique() && argType.isUnique();
+    boolean anyOrdered = receiverType.isOrdered() || argType.isOrdered();
+
+    Type resultType;
+    if (bothUnique && anyOrdered) {
+      resultType = Type.orderedSet(commonElemType);
+    } else if (bothUnique) {
+      resultType = Type.set(commonElemType);
+    } else if (anyOrdered) {
+      resultType = Type.sequence(commonElemType);
+    } else {
+      resultType = Type.bag(commonElemType);
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  // ==================== Aggregate Operations ====================
+
+  /**
+   * Type checks aggregate operations (sum, max, min, avg).
+   *
+   * <p>All require numeric collection receivers and return singleton Integer.
+   */
+  @Override
+  public Type visitSumOp(OCLParser.SumOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'sum' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+    if (elemType != Type.ANY && !elemType.isConformantTo(Type.INTEGER)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'sum' requires numeric collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    Type resultType = Type.singleton(Type.INTEGER);
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Visits a 'max' operation node in the AST.
+   *
+   * <p>This method delegates to {@link #visitAggregateOp} to perform type checking and result type
+   * computation for the 'max' aggregate operation over a collection.
+   *
+   * @param ctx the context of the 'max' operation node in the AST
+   * @return the resulting type of the aggregate operation
+   */
+  @Override
+  public Type visitMaxOp(OCLParser.MaxOpContext ctx) {
+    return visitAggregateOp(ctx, "max");
+  }
+
+  /**
+   * Visits a 'min' operation node in the AST.
+   *
+   * <p>This method delegates to {@link #visitAggregateOp} to perform type checking and result type
+   * computation for the 'min' aggregate operation over a collection.
+   *
+   * @param ctx the context of the 'min' operation node in the AST
+   * @return the resulting type of the aggregate operation
+   */
+  @Override
+  public Type visitMinOp(OCLParser.MinOpContext ctx) {
+    return visitAggregateOp(ctx, "min");
+  }
+
+  /**
+   * Visits an 'avg' operation node in the AST.
+   *
+   * <p>This method delegates to {@link #visitAggregateOp} to perform type checking and result type
+   * computation for the 'avg' aggregate operation over a collection.
+   *
+   * @param ctx the context of the 'avg' operation node in the AST
+   * @return the resulting type of the aggregate operation
+   */
+  @Override
+  public Type visitAvgOp(OCLParser.AvgOpContext ctx) {
+    return visitAggregateOp(ctx, "avg");
+  }
+
+  /** Helper for aggregate operation type checking. */
+  private Type visitAggregateOp(ParserRuleContext ctx, String opName) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'" + opName + "' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+    if (elemType != Type.ANY && !elemType.isConformantTo(Type.INTEGER)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'" + opName + "' requires numeric collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    Type resultType = Type.singleton(Type.INTEGER);
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  // ==================== Numeric Operations ====================
+
+  /**
+   * Type checks numeric operations (abs, floor, ceil, round).
+   *
+   * <p>All require numeric collection receivers and preserve collection type.
+   */
+  @Override
+  public Type visitAbsOp(OCLParser.AbsOpContext ctx) {
+    return visitNumericOp(ctx, "abs");
+  }
+
+  /**
+   * Visits a 'floor' operation node in the AST.
+   *
+   * <p>This method delegates to {@link #visitNumericOp} to perform type checking and result type
+   * computation for the 'floor' numeric operation.
+   *
+   * @param ctx the context of the 'floor' operation node in the AST
+   * @return the resulting numeric type of the operation
+   */
+  @Override
+  public Type visitFloorOp(OCLParser.FloorOpContext ctx) {
+    return visitNumericOp(ctx, "floor");
+  }
+
+  /**
+   * Visits a 'ceil' operation node in the AST.
+   *
+   * <p>This method delegates to {@link #visitNumericOp} to perform type checking and result type
+   * computation for the 'ceil' numeric operation.
+   *
+   * @param ctx the context of the 'ceil' operation node in the AST
+   * @return the resulting numeric type of the operation
+   */
+  @Override
+  public Type visitCeilOp(OCLParser.CeilOpContext ctx) {
+    return visitNumericOp(ctx, "ceil");
+  }
+
+  /**
+   * Visits a 'round' operation node in the AST.
+   *
+   * <p>This method delegates to {@link #visitNumericOp} to perform type checking and result type
+   * computation for the 'round' numeric operation.
+   *
+   * @param ctx the context of the 'round' operation node in the AST
+   * @return the resulting numeric type of the operation
+   */
+  @Override
+  public Type visitRoundOp(OCLParser.RoundOpContext ctx) {
+    return visitNumericOp(ctx, "round");
+  }
+
+  /** Helper for numeric operation type checking. */
+  private Type visitNumericOp(ParserRuleContext ctx, String opName) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'" + opName + "' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+    if (!elemType.isConformantTo(Type.INTEGER)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'" + opName + "' requires numeric collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    // Preserve collection type
+    nodeTypes.put(ctx, receiverType);
+    return receiverType;
+  }
+
+  /**
+   * Type checks the {@code lift()} operation.
+   *
+   * <p>Wraps collection in another collection: Collection(T) → Collection(Collection(T))
+   *
+   * @param ctx The lift operation node
+   * @return Nested collection type
+   */
+  @Override
+  public Type visitLiftOp(OCLParser.LiftOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'lift' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type resultType = preserveCollectionKind(receiverType, receiverType);
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  // ==================== Iterator Operations ====================
+
+  /**
+   * Type checks the {@code select()} iterator.
+   *
+   * <p>Creates scope with iterator variable, validates predicate is Boolean, returns same
+   * collection type.
+   *
+   * @param ctx The select operation node
+   * @return Same collection type as receiver
+   */
+  @Override
+  public Type visitSelectOp(OCLParser.SelectOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'select' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Get iterator variables (already defined in Pass 1)
+    List<String> iterVars = new ArrayList<>();
+    if (ctx.iteratorVars != null) {
+      for (TerminalNode id : ctx.iteratorVarList().ID()) {
+        iterVars.add(id.getText());
+      }
+    }
+
+    if (iterVars.isEmpty()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "select requires at least one iterator variable",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+
+    // Enter scope created by Pass 1 - iterator variables already defined
+    Scope iterScope = scopeAnnotator.getScope(ctx);
+    if (iterScope == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Internal error: No scope annotation from Pass 1",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    symbolTable.enterScope(iterScope);
+
+    try {
+      // Refine iterator variable types from Type.ANY to actual element type
+      for (String iterVar : iterVars) {
+        VariableSymbol symbol = symbolTable.resolveVariable(iterVar);
+        if (symbol != null && symbol.getType() == Type.ANY) {
+          symbol.setType(elemType);
+        }
+      }
+
+      Type bodyType = visit(ctx.body);
+
+      if (!bodyType.isConformantTo(Type.BOOLEAN)) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "select body must return Boolean",
+            ErrorSeverity.ERROR,
+            "type-checker");
+      }
+
+      nodeTypes.put(ctx, receiverType);
+      return receiverType;
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Visits a 'reject' operation node in the AST.
+   *
+   * <p>The 'reject' operation filters elements of a collection by a predicate, keeping only
+   * elements for which the predicate evaluates to false.
+   *
+   * <p>
+   *
+   * @param ctx the context of the 'reject' operation node in the AST
+   * @return the receiver collection type if successful; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitRejectOp(OCLParser.RejectOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'reject' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+
+    List<String> iterVars = new ArrayList<>();
+    if (ctx.iteratorVars != null) {
+      for (TerminalNode id : ctx.iteratorVarList().ID()) {
+        iterVars.add(id.getText());
+      }
+    }
+
+    if (iterVars.isEmpty()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "reject requires at least one iterator variable",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Enter scope created by Pass 1
+    Scope iterScope = scopeAnnotator.getScope(ctx);
+    if (iterScope == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Internal error: No scope annotation from Pass 1",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    symbolTable.enterScope(iterScope);
+
+    try {
+      // Refine iterator variable types
+      for (String iterVar : iterVars) {
+        VariableSymbol symbol = symbolTable.resolveVariable(iterVar);
+        if (symbol != null && symbol.getType() == Type.ANY) {
+          symbol.setType(elemType);
+        }
+      }
+
+      Type bodyType = visit(ctx.body);
+
+      if (!bodyType.getElementType().equals(Type.BOOLEAN)) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "reject predicate must return Boolean",
+            ErrorSeverity.ERROR,
+            "type-checker");
+        return Type.ERROR;
+      }
+
+      nodeTypes.put(ctx, receiverType);
+      return receiverType;
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Visits a 'collect' operation node in the AST.
+   *
+   * <p>The 'collect' operation applies a body expression to each element of a collection, producing
+   * a new collection of the results.
+   *
+   * <p>This method performs type checking similarly to 'reject', refining iterator variable types,
+   * visiting the body, and computing the result type while preserving the collection kind.
+   *
+   * @param ctx the context of the 'collect' operation node in the AST
+   * @return the resulting collection type if successful; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitCollectOp(OCLParser.CollectOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'collect' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    List<String> iterVars = new ArrayList<>();
+    if (ctx.iteratorVars != null) {
+      for (TerminalNode id : ctx.iteratorVarList().ID()) {
+        iterVars.add(id.getText());
+      }
+    }
+
+    if (iterVars.isEmpty()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "collect requires at least one iterator variable",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+
+    // Enter scope created by Pass 1
+    Scope iterScope = scopeAnnotator.getScope(ctx);
+    if (iterScope == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Internal error: No scope annotation from Pass 1",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    symbolTable.enterScope(iterScope);
+
+    try {
+      // Refine iterator variable types
+      for (String iterVar : iterVars) {
+        VariableSymbol symbol = symbolTable.resolveVariable(iterVar);
+        if (symbol != null && symbol.getType() == Type.ANY) {
+          symbol.setType(elemType);
+        }
+      }
+
+      Type bodyType = visit(ctx.body);
+
+      if (bodyType == Type.ERROR) {
+        return Type.ERROR;
+      }
+
+      Type resultType = preserveCollectionKind(receiverType, bodyType);
+      nodeTypes.put(ctx, resultType);
+      return resultType;
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Visits a 'forAll' operation node in the AST.
+   *
+   * <p>The 'forAll' operation checks that a predicate evaluates to true for all elements in a
+   * collection.
+   *
+   * <p>This method performs type checking similar to 'reject', but ensures that the body expression
+   * returns Boolean values and that the final result type is {@link Type#BOOLEAN}.
+   *
+   * @param ctx the context of the 'forAll' operation node in the AST
+   * @return {@link Type#BOOLEAN} if successful; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitForAllOp(OCLParser.ForAllOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'forAll' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+
+    List<String> iterVars = new ArrayList<>();
+    if (ctx.iteratorVars != null) {
+      for (TerminalNode id : ctx.iteratorVarList().ID()) {
+        iterVars.add(id.getText());
+      }
+    }
+
+    if (iterVars.isEmpty()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "forAll requires at least one iterator variable",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Enter scope created by Pass 1
+    Scope iterScope = scopeAnnotator.getScope(ctx);
+    if (iterScope == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Internal error: No scope annotation from Pass 1",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    symbolTable.enterScope(iterScope);
+
+    try {
+      // Refine iterator variable types
+      for (String iterVar : iterVars) {
+        VariableSymbol symbol = symbolTable.resolveVariable(iterVar);
+        if (symbol != null && symbol.getType() == Type.ANY) {
+          symbol.setType(elemType);
+        }
+      }
+
+      Type bodyType = visit(ctx.body);
+
+      if (!bodyType.getElementType().equals(Type.BOOLEAN)) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "forAll predicate must return Boolean",
+            ErrorSeverity.ERROR,
+            "type-checker");
+        return Type.ERROR;
+      }
+
+      Type resultType = Type.BOOLEAN;
+      nodeTypes.put(ctx, resultType);
+      return resultType;
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Visits an 'exists' operation node in the AST.
+   *
+   * <p>The 'exists' operation checks whether there exists at least one element in a collection for
+   * which the predicate evaluates to true.
+   *
+   * <p>This method performs type checking similar to 'forAll', ensuring that the body expression
+   * returns Boolean values and that the final result type is {@link Type#BOOLEAN}.
+   *
+   * @param ctx the context of the 'exists' operation node in the AST
+   * @return {@link Type#BOOLEAN} if successful; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitExistsOp(OCLParser.ExistsOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'exists' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+
+    List<String> iterVars = new ArrayList<>();
+    if (ctx.iteratorVars != null) {
+      for (TerminalNode id : ctx.iteratorVarList().ID()) {
+        iterVars.add(id.getText());
+      }
+    }
+
+    if (iterVars.isEmpty()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "exists requires at least one iterator variable",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Enter scope created by Pass 1
+    Scope iterScope = scopeAnnotator.getScope(ctx);
+    if (iterScope == null) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Internal error: No scope annotation from Pass 1",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    symbolTable.enterScope(iterScope);
+
+    try {
+      // Refine iterator variable types
+      for (String iterVar : iterVars) {
+        VariableSymbol symbol = symbolTable.resolveVariable(iterVar);
+        if (symbol != null && symbol.getType() == Type.ANY) {
+          symbol.setType(elemType);
+        }
+      }
+
+      Type bodyType = visit(ctx.body);
+
+      if (!bodyType.getElementType().equals(Type.BOOLEAN)) {
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "exists predicate must return Boolean",
+            ErrorSeverity.ERROR,
+            "type-checker");
+        return Type.ERROR;
+      }
+
+      Type resultType = Type.BOOLEAN;
+      nodeTypes.put(ctx, resultType);
+      return resultType;
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  // ==================== String Operations ====================
+
+  /**
+   * Type checks string operations (concat, substring, toUpper, etc.).
+   *
+   * <p>All validate String receiver and appropriate argument types.
+   */
+  @Override
+  public Type visitConcatOp(OCLParser.ConcatOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+    Type argType = visit(ctx.arg);
+
+    if (!receiverType.isConformantTo(Type.STRING)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "concat requires String receiver",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    if (!argType.isConformantTo(Type.STRING)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "concat argument must be String",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, Type.STRING);
+    return Type.STRING;
+  }
+
+  /**
+   * Visits a 'substring' operation node in the AST.
+   *
+   * <p>This operation extracts a substring from a String receiver using start and end indices.
+   *
+   * <p>Steps:
+   *
+   * <ul>
+   *   <li>Check that the receiver is of type {@link Type#STRING}.
+   *   <li>Visit and check that both start and end indices are of type {@link Type#INTEGER}.
+   *   <li>If type checks pass, the resulting type is {@link Type#STRING}.
+   * </ul>
+   *
+   * @param ctx the context of the 'substring' operation node in the AST
+   * @return {@link Type#STRING} if the receiver and indices are valid; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitSubstringOp(OCLParser.SubstringOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isConformantTo(Type.STRING)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'substring' requires String",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type startType = visit(ctx.start);
+    Type endType = visit(ctx.end);
+
+    if (!startType.isConformantTo(Type.INTEGER)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Start index must be Integer",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    if (!endType.isConformantTo(Type.INTEGER)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "End index must be Integer",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, Type.STRING);
+    return Type.STRING;
+  }
+
+  /**
+   * Visits a 'toUpper' operation node in the AST.
+   *
+   * <p>Delegates to {@link #visitStringNoArgOp} for type checking and ensures the receiver is a
+   * String. The result type is {@link Type#STRING}.
+   *
+   * @param ctx the context of the 'toUpper' operation node in the AST
+   * @return {@link Type#STRING} if the receiver is a String; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitToUpperOp(OCLParser.ToUpperOpContext ctx) {
+    return visitStringNoArgOp(ctx, "toUpper");
+  }
+
+  /**
+   * Visits a 'toLower' operation node in the AST.
+   *
+   * <p>Delegates to {@link #visitStringNoArgOp} for type checking and ensures the receiver is a
+   * String. The result type is {@link Type#STRING}.
+   *
+   * @param ctx the context of the 'toLower' operation node in the AST
+   * @return {@link Type#STRING} if the receiver is a String; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitToLowerOp(OCLParser.ToLowerOpContext ctx) {
+    return visitStringNoArgOp(ctx, "toLower");
+  }
+
+  /**
+   * Visits an 'indexOf' operation node in the AST.
+   *
+   * <p>This operation returns the position of a substring within a String receiver.
+   *
+   * <ul>
+   *   <li>Check that the receiver is {@link Type#STRING}.
+   *   <li>Check that the argument is {@link Type#STRING}.
+   *   <li>If valid, the resulting type is {@link Type#INTEGER}.
+   * </ul>
+   *
+   * @param ctx the context of the 'indexOf' operation node in the AST
+   * @return {@link Type#INTEGER} if the receiver and argument are valid; otherwise {@link
+   *     Type#ERROR}
+   */
+  @Override
+  public Type visitIndexOfOp(OCLParser.IndexOfOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isConformantTo(Type.STRING)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'indexOf' requires String",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type argType = visit(ctx.arg);
+    if (!argType.isConformantTo(Type.STRING)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Argument must be String",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, Type.INTEGER);
+    return Type.INTEGER;
+  }
+
+  /**
+   * Visits an 'equalsIgnoreCase' operation node in the AST.
+   *
+   * <p>This operation compares the receiver String with another String argument, ignoring case.
+   *
+   * <ul>
+   *   <li>Check that the receiver is {@link Type#STRING}.
+   *   <li>Check that the argument is {@link Type#STRING}.
+   *   <li>If valid, the resulting type is {@link Type#BOOLEAN}.
+   * </ul>
+   *
+   * @param ctx the context of the 'equalsIgnoreCase' operation node in the AST
+   * @return {@link Type#BOOLEAN} if the receiver and argument are valid; otherwise {@link
+   *     Type#ERROR}
+   */
+  @Override
+  public Type visitEqualsIgnoreCaseOp(OCLParser.EqualsIgnoreCaseOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isConformantTo(Type.STRING)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'equalsIgnoreCase' requires String",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type argType = visit(ctx.arg);
+    if (!argType.isConformantTo(Type.STRING)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Argument must be String",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+
+    nodeTypes.put(ctx, Type.BOOLEAN);
+    return Type.BOOLEAN;
+  }
+
+  /** Helper for string operations with no arguments. */
+  private Type visitStringNoArgOp(ParserRuleContext ctx, String opName) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isConformantTo(Type.STRING)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'" + opName + "' requires String",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    nodeTypes.put(ctx, Type.STRING);
+    return Type.STRING;
+  }
+
+  // ==================== Type Operations ====================
+
+  /**
+   * Type checks the {@code oclIsKindOf()} operation.
+   *
+   * <p>Returns collection of Boolean values, one per element.
+   *
+   * @param ctx The oclIsKindOf operation node
+   * @return Collection(Boolean) with same kind as receiver
+   */
+  @Override
+  public Type visitOclIsKindOfOp(OCLParser.OclIsKindOfOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    Type targetType = visit(ctx.type);
+    if (targetType == null && ctx.type != null) {
+      targetType = resolveTypeExpression(ctx.type);
+    }
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "oclIsKindOf() requires collection receiver",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Preserve collection kind from receiver
+    Type resultType = preserveCollectionKind(receiverType, Type.BOOLEAN);
+    nodeTypes.put(ctx, resultType);
+    nodeTypes.put(ctx.type, targetType);
+    return resultType;
+  }
+
+  /** Helper to resolve type expressions for type operations. */
+  private Type resolveTypeExpression(OCLParser.TypeExpCSContext ctx) {
+    String text = ctx.getText();
+    return switch (text) {
+      case "Integer" -> Type.INTEGER;
+      case "String" -> Type.STRING;
+      case "Boolean" -> Type.BOOLEAN;
+      default -> Type.ANY;
+    };
+  }
+
+  /**
+   * Visits an 'oclIsTypeOf' operation node in the AST.
+   *
+   * <p>This operation checks whether each element of a collection is exactly of a given type.
+   *
+   * <ul>
+   *   <li>Ensures that the receiver is a collection; otherwise reports an error and returns {@link
+   *       Type#ERROR}.
+   *   <li>The resulting type preserves the collection kind of the receiver, but with {@link
+   *       Type#BOOLEAN} as element type.
+   *   <li>The resulting type is stored in {@code nodeTypes}.
+   * </ul>
+   *
+   * @param ctx the context of the 'oclIsTypeOf' operation node in the AST
+   * @return the collection of Boolean type if receiver is valid; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitOclIsTypeOfOp(OCLParser.OclIsTypeOfOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'oclIsTypeOf' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type resultType = preserveCollectionKind(receiverType, Type.BOOLEAN);
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Visits an 'oclAsType' operation node in the AST.
+   *
+   * <p>This operation casts each element of a collection to a specified target type.
+   *
+   * <ul>
+   *   <li>Ensures that the receiver is a collection; otherwise reports an error and returns {@link
+   *       Type#ERROR}.
+   *   <li>Visits the target type expression to determine the cast type.
+   *   <li>The resulting type preserves the collection kind of the receiver, but with the target
+   *       element type.
+   *   <li>The resulting type is stored in {@code nodeTypes}.
+   * </ul>
+   *
+   * @param ctx the context of the 'oclAsType' operation node in the AST
+   * @return the collection with elements cast to the target type if receiver is valid; otherwise
+   *     {@link Type#ERROR}
+   */
+  @Override
+  public Type visitOclAsTypeOp(OCLParser.OclAsTypeOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isCollection()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "'oclAsType' requires collection",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type targetType = visit(ctx.type);
+
+    Type resultType = preserveCollectionKind(receiverType, targetType);
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  // ==================== Metamodel Operations ====================
+  /**
+   * Type checks the {@code allInstances()} operation.
+   *
+   * <p>Requires metaclass receiver, returns Set of that metaclass type.
+   *
+   * <p><b>Example:</b> {@code Person.allInstances()} → Set(Person)
+   *
+   * @param ctx The allInstances operation node
+   * @return Set(MetaclassType)
+   */
+  @Override
+  public Type visitAllInstancesOp(OCLParser.AllInstancesOpContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (!receiverType.isMetaclassType()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "allInstances() requires metaclass receiver",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type resultType = Type.set(receiverType);
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  // ==================== Not Yet Implemented ====================
+  /**
+   * Type checks correspondence operator (~).
+   *
+   * <p>The correspondence operator is a binary predicate that checks if two objects are related via
+   * a Correspondence model instance. Both operands must be single object instances (not
+   * collections, not primitives).
+   *
+   * <p><b>Syntax:</b> {@code obj1 ~ obj2}
+   *
+   * <p><b>Type:</b> {@code Boolean}
+   *
+   * <p><b>Examples:</b>
+   *
+   * <pre>
+   * self ~ sat                                    // Boolean
+   * Satellite.allInstances().select(s | self ~ s) // Filtered collection
+   * self ~ sat implies sat.active                 // Consistency check
+   * </pre>
+   *
+   * @param ctx Correspondence comparison operation node
+   * @return Type.BOOLEAN if operands are valid, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitCorrespondence(OCLParser.CorrespondenceContext ctx) {
+    Type leftType = visit(ctx.left);
+    Type rightType = visit(ctx.right);
+
+    // Unwrap singletons to get base types
+    Type baseLeftType = leftType.isSingleton() ? leftType.getElementType() : leftType;
+    Type baseRightType = rightType.isSingleton() ? rightType.getElementType() : rightType;
+
+    // Both sides must be single objects (singleton or object type, not multi-valued collection)
+    if (leftType.isCollection() && leftType.getMultiplicity() != Multiplicity.SINGLETON) {
+      errors.add(
+          ctx.left.start.getLine(),
+          ctx.left.start.getCharPositionInLine(),
+          "Correspondence operator ~ requires single object on left side, got collection: "
+              + leftType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    if (rightType.isCollection() && rightType.getMultiplicity() != Multiplicity.SINGLETON) {
+      errors.add(
+          ctx.right.start.getLine(),
+          ctx.right.start.getCharPositionInLine(),
+          "Correspondence operator ~ requires single object on right side, got collection: "
+              + rightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Both must be metaclass types (not primitives)
+    if (!baseLeftType.isMetaclassType() && baseLeftType != Type.ANY) {
+      errors.add(
+          ctx.left.start.getLine(),
+          ctx.left.start.getCharPositionInLine(),
+          "Correspondence operator ~ requires object type on left side, got: " + baseLeftType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    if (!baseRightType.isMetaclassType() && baseRightType != Type.ANY) {
+      errors.add(
+          ctx.right.start.getLine(),
+          ctx.right.start.getCharPositionInLine(),
+          "Correspondence operator ~ requires object type on right side, got: " + baseRightType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Result is always Boolean
+    Type resultType = Type.BOOLEAN;
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks select(~) shorthand for correspondence filtering.
+   *
+   * <p>Desugars to: {@code select(x | self ~ x)}
+   *
+   * <p>Validates that:
+   *
+   * <ul>
+   *   <li>'self' is bound in the current scope
+   *   <li>'self' is an object type (not primitive)
+   *   <li>Receiver collection contains object types (not primitives)
+   * </ul>
+   *
+   * <p><b>Example:</b>
+   *
+   * <pre>{@code
+   * context Spacecraft inv:
+   *   Satellite.allInstances().select(~).notEmpty()
+   * }</pre>
+   *
+   * @param ctx The select(~) operation node
+   * @return Collection type matching the receiver's type, or Type.ERROR if validation fails
+   */
+  @Override
+  public Type visitSelectCorrespondence(OCLParser.SelectCorrespondenceContext ctx) {
+    // The receiver was already pushed onto receiverTypeStack by visitPrimaryWithNav
+    // Get it from the stack (same approach as visitSelectOp uses)
+    Type receiverType = receiverStack.peek();
+
+    if (receiverType == null || receiverType == Type.ERROR) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "Cannot determine receiver type for select(~)",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Check that 'self' is bound
+    VariableSymbol selfSymbol = symbolTable.resolveVariable("self");
+    if (selfSymbol == null) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "select(~) requires 'self' to be bound in current context",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type selfType = selfSymbol.getType();
+
+    // Unwrap singleton if needed
+    Type baseSelfType = selfType.isSingleton() ? selfType.getElementType() : selfType;
+
+    // Self must be object type (not primitive)
+    if (!baseSelfType.isMetaclassType() && baseSelfType != Type.ANY) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "select(~) requires 'self' to be an object type, got: " + baseSelfType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Get element type from receiver collection
+    Type elemType = receiverType.getElementType();
+
+    // Elements must be object types (not primitives)
+    if (!elemType.isMetaclassType() && elemType != Type.ANY) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "select(~) requires collection of object types, got: " + elemType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Result is same collection type as receiver
+    Type resultType = receiverType;
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks reject(~) shorthand for inverse correspondence filtering.
+   *
+   * <p>Desugars to: {@code reject(x | self ~ x)}
+   *
+   * <p>Validates that:
+   *
+   * <ul>
+   *   <li>'self' is bound in the current scope
+   *   <li>'self' is an object type (not primitive)
+   *   <li>Receiver collection contains object types (not primitives)
+   * </ul>
+   *
+   * <p><b>Example:</b>
+   *
+   * <pre>{@code
+   * context Satellite inv:
+   *   Spacecraft.allInstances().reject(~).isEmpty()
+   * }</pre>
+   *
+   * @param ctx The reject(~) operation node
+   * @return Collection type matching the receiver's type, or Type.ERROR if validation fails
+   */
+  @Override
+  public Type visitRejectCorrespondence(OCLParser.RejectCorrespondenceContext ctx) {
+    Type receiverType = receiverStack.peek();
+    ;
+
+    if (receiverType == null || receiverType == Type.ERROR) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "Cannot determine receiver type for reject(~)",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    VariableSymbol selfSymbol = symbolTable.resolveVariable("self");
+    if (selfSymbol == null) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "reject(~) requires 'self' to be bound in current context",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type selfType = selfSymbol.getType();
+    Type baseSelfType = selfType.isSingleton() ? selfType.getElementType() : selfType;
+
+    if (!baseSelfType.isMetaclassType() && baseSelfType != Type.ANY) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "reject(~) requires 'self' to be an object type, got: " + baseSelfType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+
+    if (!elemType.isMetaclassType() && elemType != Type.ANY) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "reject(~) requires collection of object types, got: " + elemType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type resultType = receiverType;
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Type checks exists(~) shorthand for correspondence existence check.
+   *
+   * <p>Desugars to: {@code exists(x | self ~ x)}
+   *
+   * <p>Validates that:
+   *
+   * <ul>
+   *   <li>'self' is bound in the current scope
+   *   <li>'self' is an object type (not primitive)
+   *   <li>Receiver collection contains object types (not primitives)
+   * </ul>
+   *
+   * <p><b>Example:</b>
+   *
+   * <pre>{@code
+   * context Spacecraft inv:
+   *   Satellite.allInstances().exists(~)
+   * }</pre>
+   *
+   * @param ctx The exists(~) operation node
+   * @return Type.BOOLEAN if validation succeeds, Type.ERROR otherwise
+   */
+  @Override
+  public Type visitExistsCorrespondence(OCLParser.ExistsCorrespondenceContext ctx) {
+    Type receiverType = receiverStack.peek();
+
+    if (receiverType == null || receiverType == Type.ERROR) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "Cannot determine receiver type for exists(~)",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    VariableSymbol selfSymbol = symbolTable.resolveVariable("self");
+    if (selfSymbol == null) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "exists(~) requires 'self' to be bound in current context",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type selfType = selfSymbol.getType();
+    Type baseSelfType = selfType.isSingleton() ? selfType.getElementType() : selfType;
+
+    if (!baseSelfType.isMetaclassType() && baseSelfType != Type.ANY) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "exists(~) requires 'self' to be an object type, got: " + baseSelfType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    Type elemType = receiverType.getElementType();
+
+    if (!elemType.isMetaclassType() && elemType != Type.ANY) {
+      errors.add(
+          ctx.start.getLine(),
+          ctx.start.getCharPositionInLine(),
+          "exists(~) requires collection of object types, got: " + elemType,
+          ErrorSeverity.ERROR,
+          "type-checker");
+      return Type.ERROR;
+    }
+
+    // Result is always Boolean for exists
+    Type resultType = Type.BOOLEAN;
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /** Placeholder for message operator (^). */
+  @Override
+  public Type visitMessage(OCLParser.MessageContext ctx) {
+    Type leftType = visit(ctx.left);
+
+    errors.add(
+        ctx.getStart().getLine(),
+        ctx.getStart().getCharPositionInLine(),
+        "Message operator '^' not yet implemented",
+        ErrorSeverity.WARNING,
+        "type-checker");
+
+    nodeTypes.put(ctx, leftType);
+    return leftType;
+  }
+
+  // ==================== Delegation & Miscellaneous ====================
+  @Override
+  public Type visitPrefixedExpr(OCLParser.PrefixedExprContext ctx) {
+    return visit(ctx.prefixedExpCS());
+  }
+
+  /**
+   * Visits a literal node in the AST.
+   *
+   * <p>Delegates type checking to the underlying literal expression.
+   *
+   * @param ctx the context of the literal node in the AST
+   * @return the type of the literal expression
+   */
+  @Override
+  public Type visitLiteral(OCLParser.LiteralContext ctx) {
+    return visit(ctx.literalExpCS());
+  }
+
+  /**
+   * Visits a conditional (if-then-else) node in the AST.
+   *
+   * <p>Delegates type checking to the underlying if-expression.
+   *
+   * @param ctx the context of the conditional node in the AST
+   * @return the type of the if-expression
+   */
+  @Override
+  public Type visitConditional(OCLParser.ConditionalContext ctx) {
+    return visit(ctx.ifExpCS());
+  }
+
+  /**
+   * Visits a let-binding node in the AST.
+   *
+   * <p>Delegates type checking to the underlying let-expression.
+   *
+   * @param ctx the context of the let-binding node in the AST
+   * @return the type of the let-expression
+   */
+  @Override
+  public Type visitLetBinding(OCLParser.LetBindingContext ctx) {
+    return visit(ctx.letExpCS());
+  }
+
+  /**
+   * Visits a collection literal node in the AST.
+   *
+   * <p>Delegates type checking to the underlying collection literal expression.
+   *
+   * @param ctx the context of the collection literal node in the AST
+   * @return the type of the collection literal expression
+   */
+  @Override
+  public Type visitCollectionLiteral(OCLParser.CollectionLiteralContext ctx) {
+    return visit(ctx.collectionLiteralExpCS());
+  }
+
+  /**
+   * Visits a type literal node in the AST.
+   *
+   * <p>Delegates type checking to the underlying type literal expression.
+   *
+   * @param ctx the context of the type literal node in the AST
+   * @return the type of the type literal expression
+   */
+  @Override
+  public Type visitTypeLiteral(OCLParser.TypeLiteralContext ctx) {
+    return visit(ctx.typeLiteralExpCS());
+  }
+
+  /**
+   * Visits a nested expression node in the AST.
+   *
+   * <p>Delegates type checking to the underlying nested expression.
+   *
+   * @param ctx the context of the nested expression node in the AST
+   * @return the type of the nested expression
+   */
+  @Override
+  public Type visitNested(OCLParser.NestedContext ctx) {
+    return visit(ctx.nestedExpCS());
+  }
+
+  /**
+   * Visits a 'self' expression node in the AST.
+   *
+   * <p>Delegates type checking to the underlying self expression.
+   *
+   * @param ctx the context of the self expression node in the AST
+   * @return the type of the self expression
+   */
+  @Override
+  public Type visitSelf(OCLParser.SelfContext ctx) {
+    return visit(ctx.selfExpCS());
+  }
+
+  /**
+   * Visits a variable reference node in the AST.
+   *
+   * <p>Delegates type checking to the underlying variable expression.
+   *
+   * @param ctx the context of the variable reference node in the AST
+   * @return the type of the variable expression
+   */
+  @Override
+  public Type visitVariable(OCLParser.VariableContext ctx) {
+    return visit(ctx.variableExpCS());
+  }
+
+  /**
+   * Visits a nested expression node in the AST.
+   *
+   * <p>A nested expression may contain one or more sub-expressions. This method performs the
+   * following steps:
+   *
+   * <ul>
+   *   <li>Checks whether the nested expression contains any sub-expressions; if empty, an error is
+   *       reported and {@link Type#ERROR} is returned.
+   *   <li>Iterates over all sub-expressions, visiting each one and updating the resulting type to
+   *       the type of the last sub-expression.
+   *   <li>Stores the resulting type in {@code nodeTypes}.
+   * </ul>
+   *
+   * @param ctx the context of the nested expression node in the AST
+   * @return the type of the last sub-expression if any exist; otherwise {@link Type#ERROR}
+   */
+  @Override
+  public Type visitNestedExpCS(OCLParser.NestedExpCSContext ctx) {
+    List<OCLParser.ExpCSContext> exps = ctx.expCS();
+    if (exps.isEmpty()) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Empty nested expression",
+          ErrorSeverity.ERROR,
+          "type-checker");
+      nodeTypes.put(ctx, Type.ERROR);
+      return Type.ERROR;
+    }
+
+    Type resultType = null;
+    for (OCLParser.ExpCSContext exp : exps) {
+      resultType = visit(exp);
+    }
+
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Visits a type literal expression node in the AST.
+   *
+   * <p>This method delegates type checking to the underlying type literal node. The type literal
+   * represents a type as an expression (e.g., a class or primitive type).
+   *
+   * @param ctx the context of the type literal expression node in the AST
+   * @return the type of the underlying type literal
+   */
+  @Override
+  public Type visitTypeLiteralExpCS(OCLParser.TypeLiteralExpCSContext ctx) {
+    return visit(ctx.typeLiteralCS());
+  }
+
+  /**
+   * Visits a property access node in the AST.
+   *
+   * <p>This method performs type checking for property access expressions, e.g., accessing a field
+   * or attribute of an object or element of a collection.
+   *
+   * @param ctx the context of the property access node in the AST
+   * @return the type of the accessed property
+   */
+  @Override
+  public Type visitPropertyAccess(OCLParser.PropertyAccessContext ctx) {
+    Type receiverType = receiverStack.peek();
+    String propertyName = ctx.propertyName.getText();
+    Type resultType = typeCheckPropertyAccess(receiverType, propertyName, ctx);
+    nodeTypes.put(ctx, resultType);
+    return resultType;
+  }
+
+  /**
+   * Visits a collection operation node in the AST.
+   *
+   * <p>Delegates type checking to the underlying collection operation expression.
+   *
+   * @param ctx the context of the collection operation node in the AST
+   * @return the type of the collection operation expression
+   */
+  @Override
+  public Type visitCollectionOperation(OCLParser.CollectionOperationContext ctx) {
+    return visit(ctx.collectionOpCS());
+  }
+
+  /**
+   * Visits a string operation node in the AST.
+   *
+   * <p>Delegates type checking to the underlying string operation expression.
+   *
+   * @param ctx the context of the string operation node in the AST
+   * @return the type of the string operation expression
+   */
+  @Override
+  public Type visitStringOperation(OCLParser.StringOperationContext ctx) {
+    return visit(ctx.stringOpCS());
+  }
+
+  /**
+   * Visits an iterator operation node in the AST.
+   *
+   * <p>Delegates type checking to the underlying iterator operation expression.
+   *
+   * @param ctx the context of the iterator operation node in the AST
+   * @return the type of the iterator operation expression
+   */
+  @Override
+  public Type visitIteratorOperation(OCLParser.IteratorOperationContext ctx) {
+    return visit(ctx.iteratorOpCS());
+  }
+
+  /**
+   * Visits a type operation node in the AST.
+   *
+   * <p>Delegates type checking to the underlying type operation expression.
+   *
+   * @param ctx the context of the type operation node in the AST
+   * @return the type of the type operation expression
+   */
+  @Override
+  public Type visitTypeOperation(OCLParser.TypeOperationContext ctx) {
+    return visit(ctx.typeOpCS());
+  }
+
+  /**
+   * Visits a 'onespace' lexical token in the AST.
+   *
+   * <p>This node represents a whitespace token and has type {@link Type#ANY}.
+   *
+   * @param ctx the context of the onespace token in the AST
+   * @return {@link Type#ANY} since it represents a lexical token
+   */
+  @Override
+  public Type visitOnespace(OCLParser.OnespaceContext ctx) {
+    return Type.ANY; // Lexical token
+  }
+
+  // ==================== Accessors ====================
+  /**
+   * Returns the computed type annotations for the parse tree.
+   *
+   * <p>This property is used by the evaluation phase to access pre-computed type information for
+   *
+   * <p>type-dependent operations.
+   *
+   * @return The parse tree property mapping nodes to types
+   */
+  public ParseTreeProperty<Type> getNodeTypes() {
+    return nodeTypes;
+  }
+
+  /**
+   * Sets the token stream for keyword-based parsing.
+   *
+   * <p>Required for {@link #visitIfExpCS} to determine expression partitioning.
+   *
+   * @param tokens The ANTLR token stream
+   */
+  public void setTokenStream(org.antlr.v4.runtime.TokenStream tokens) {
+    this.tokens = tokens;
+  }
+}
