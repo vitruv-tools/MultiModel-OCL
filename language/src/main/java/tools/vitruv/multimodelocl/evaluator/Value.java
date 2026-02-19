@@ -32,10 +32,10 @@ import tools.vitruv.multimodelocl.typechecker.Type;
  */
 public class Value {
 
-  /** The actual value - in OCL, this is ALWAYS List&lt;OCLElement&gt; */
+  /** The actual value - in OCL, this is ALWAYS List&lt;OCLElement&gt;. */
   private final List<OCLElement> elements;
 
-  /** The runtime type - includes Ctype information (unique, ordered) */
+  /** The runtime type - includes Ctype information (unique, ordered). */
   private final Type runtimeType;
 
   // ==================== Constructors ====================

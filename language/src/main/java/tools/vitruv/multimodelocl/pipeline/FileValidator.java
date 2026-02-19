@@ -31,8 +31,8 @@ public class FileValidator {
   /**
    * Validates file existence and readability.
    *
-   * @return Optional FileError if validation fails, empty if valid.
    * @param path Path to the file to validate
+   * @return Optional FileError if validation fails, empty if valid.
    */
   public static Optional<FileError> validateFile(Path path) {
     if (!Files.exists(path)) {
