@@ -54,9 +54,9 @@ import org.antlr.v4.runtime.tree.ParseTreeProperty;
  * typeChecker.visit(parseTree);
  * }</pre>
  *
- * @see ParseTreeProperty ANTLR4's node annotation utility
- * @see SymbolTableBuilder Pass 1 that populates annotations
- * @see tools.vitruv.dsls.vitruvOCL.typechecker.TypeCheckVisitor Pass 2 that reads annotations
+ * see ParseTreeProperty ANTLR4's node annotation utility; see SymbolTableBuilder Pass 1 that
+ * populates annotations; see tools.vitruv.dsls.vitruvOCL.typechecker.TypeCheckVisitor Pass 2 that
+ * reads annotations
  */
 public class ScopeAnnotator {
 

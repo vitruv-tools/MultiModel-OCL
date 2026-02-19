@@ -686,11 +686,11 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
   }
 
   /**
-   * Type checks less-than comparison (<).
+   * Type checks less-than comparison (&lt;).
    *
    * <p>Validates that operands are comparable (same type or one conforms to the other).
    *
-   * <p><b>Example:</b> {@code 5 < 10} → Boolean
+   * <p><b>Example:</b> {@code 5 &lt; 10} → Boolean
    *
    * @param ctx The less-than comparison operation node
    * @return Type.BOOLEAN if operands are comparable, Type.ERROR otherwise
@@ -717,11 +717,11 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
   }
 
   /**
-   * Type checks less-than-or-equal comparison (<=).
+   * Type checks less-than-or-equal comparison (&lt;=).
    *
    * <p>Validates that operands are comparable (same type or one conforms to the other).
    *
-   * <p><b>Example:</b> {@code 5 <= 10} → Boolean
+   * <p><b>Example:</b> {@code 5 &lt;= 10} → Boolean
    *
    * @param ctx The less-than-or-equal comparison operation node
    * @return Type.BOOLEAN if operands are comparable, Type.ERROR otherwise
@@ -2650,8 +2650,6 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
    *
    * <p>The 'reject' operation filters elements of a collection by a predicate, keeping only
    * elements for which the predicate evaluates to false.
-   *
-   * <p>
    *
    * @param ctx the context of the 'reject' operation node in the AST
    * @return the receiver collection type if successful; otherwise {@link Type#ERROR}
