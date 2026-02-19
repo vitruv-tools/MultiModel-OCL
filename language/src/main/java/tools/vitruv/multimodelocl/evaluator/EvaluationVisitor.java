@@ -1755,7 +1755,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates less-than comparison (<). Both operands must be singletons for comparison.
+   * Evaluates less-than comparison. Both operands must be singletons for comparison.
    *
    * @param ctx the less-than comparison context
    * @return singleton boolean Value with comparison result
@@ -1767,7 +1767,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates less-than-or-equal comparison (<=). Both operands must be singletons for comparison.
+   * Evaluates less-than-or-equal comparison. Both operands must be singletons for comparison.
    *
    * @param ctx the less-than-or-equal comparison context
    * @return singleton boolean Value with comparison result
@@ -1779,7 +1779,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates greater-than comparison (>). Both operands must be singletons for comparison.
+   * Evaluates greater-than comparison. Both operands must be singletons for comparison.
    *
    * @param ctx the greater-than comparison context
    * @return singleton boolean Value with comparison result

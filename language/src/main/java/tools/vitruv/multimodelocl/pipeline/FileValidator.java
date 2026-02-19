@@ -15,14 +15,25 @@ package tools.vitruv.multimodelocl.pipeline;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
-import javax.xml.parsers.*;
-import org.w3c.dom.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
 
 /** Validates files and extracts metadata. */
 public class FileValidator {
 
-  /** Validates file existence and readability. */
+  /**
+   * Validates file existence and readability.
+   *
+   * @return Optional FileError if validation fails, empty if valid.
+   * @param path Path to the file to validate
+   */
   public static Optional<FileError> validateFile(Path path) {
     if (!Files.exists(path)) {
       return Optional.of(
@@ -37,7 +48,13 @@ public class FileValidator {
     return Optional.empty();
   }
 
-  /** Extracts package name from .ecore file. */
+  /**
+   * Extracts package name from .ecore file.
+   *
+   * @return Package name from the ecore file, or throws IOException if parsing fails.
+   * @param ecorePath Path to the .ecore file
+   * @throws IOException if the file cannot be read or parsed
+   */
   public static String extractPackageNameFromEcore(Path ecorePath) throws IOException {
     try {
       DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
