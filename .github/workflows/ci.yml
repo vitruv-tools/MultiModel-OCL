@@ -104,6 +104,7 @@ jobs:
     - name: Run SonarQube analysis
       run: >
         ./mvnw clean verify sonar:sonar -P coverage
+        -Dsonar.projectKey=vitruv-tools_MultiModel-OCL
         --batch-mode
         --update-snapshots
         --no-transfer-progress
