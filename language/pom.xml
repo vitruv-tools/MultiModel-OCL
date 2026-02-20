@@ -14,6 +14,10 @@
     <artifactId>multimodelocl-language</artifactId>
     <packaging>jar</packaging>
 
+    <name>MultiModelOCL language package</name>
+    <description>The langauge implementation of Multi-Model OCL</description>
+
+
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
