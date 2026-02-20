@@ -37,10 +37,10 @@ public class TypeResolver {
   /**
    * Resolves the result type of a binary operation.
    *
-   * @param operator "+", "-", "*", "/", "=", "<", etc.
-   * @param leftType type of the left operand
-   * @param rightType type of the right operand
-   * @return the result type, or {@link Type#ERROR} in case of a type mismatch
+   * @param operator "+", "-", "*", "/", "=", "&lt;", etc.
+   * @param leftType type of the left operand.
+   * @param rightType type of the right operand.
+   * @return the result type, or {@link Type#ERROR} in case of a type mismatch.
    */
   public static Type resolveBinaryOp(String operator, Type leftType, Type rightType) {
     if (leftType == Type.ERROR || rightType == Type.ERROR) {
@@ -304,26 +304,26 @@ public class TypeResolver {
   public static boolean isCollectionOperation(String operationName) {
     return switch (operationName) {
       case "includes",
-              "excludes",
-              "isEmpty",
-              "notEmpty",
-              "size",
-              "including",
-              "excluding", // <- ADDED!
-              "select",
-              "reject",
-              "collect",
-              "first",
-              "last",
-              "any",
-              "union",
-              "intersection",
-              "flatten",
-              "sum",
-              "asSet",
-              "asSequence",
-              "asBag",
-              "asOrderedSet" ->
+          "excludes",
+          "isEmpty",
+          "notEmpty",
+          "size",
+          "including",
+          "excluding", // <- ADDED!
+          "select",
+          "reject",
+          "collect",
+          "first",
+          "last",
+          "any",
+          "union",
+          "intersection",
+          "flatten",
+          "sum",
+          "asSet",
+          "asSequence",
+          "asBag",
+          "asOrderedSet" ->
           true;
       default -> false;
     };
