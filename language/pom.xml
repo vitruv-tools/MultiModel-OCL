@@ -1,18 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>tools.vitruv.multimodelocl</groupId>
         <artifactId>multimodelocl</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>multimodelocl-language</artifactId>
     <packaging>jar</packaging>
+
+    <name>MultiModelOCL language package</name>
+    <description>The langauge implementation of Multi-Model OCL</description>
+
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -33,17 +37,14 @@
         <dependency>
             <groupId>org.eclipse.emf</groupId>
             <artifactId>org.eclipse.emf.ecore</artifactId>
-            <version>2.35.0</version>
         </dependency>
         <dependency>
             <groupId>org.antlr</groupId>
             <artifactId>antlr4-runtime</artifactId>
-            <version>${antlr4.version}</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.emf</groupId>
             <artifactId>org.eclipse.emf.ecore.xmi</artifactId>
-            <version>2.39.0</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -180,7 +181,18 @@
                 </executions>
             </plugin>
 
-            <!-- 6. Shade Plugin (Fat JAR) -->
+            <!-- 6. Javadoc -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.6.3</version>
+                <configuration>
+                    <sourcepath>${project.basedir}/src/main/java:${project.build.directory}/generated-sources/antlr4</sourcepath>
+                    <doclint>all,-missing</doclint>
+                </configuration>
+            </plugin>
+
+            <!-- 7. Shade Plugin (Fat JAR) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -203,7 +215,8 @@
                                 </filter>
                             </filters>
                             <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                <transformer
+                                    implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>tools.vitruv.multimodelocl.cli.MultiModelOCLCLI</mainClass>
                                 </transformer>
                             </transformers>
