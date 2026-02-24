@@ -175,7 +175,8 @@
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>3.6.3</version>
                 <configuration>
-                    <sourcepath>${project.basedir}/src/main/java:${project.build.directory}/generated-sources/antlr4</sourcepath>
+                    <sourcepath>
+                        ${project.basedir}/src/main/java:${project.build.directory}/generated-sources/antlr4</sourcepath>
                     <doclint>all,-missing</doclint>
                 </configuration>
             </plugin>
