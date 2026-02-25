@@ -566,53 +566,67 @@ async function findCompilerJar(): Promise<string | null> {
 async function findEcoreFiles(constraintFileUri?: vscode.Uri): Promise<string[]> {
     if (constraintFileUri) {
         const constraintDir = path.dirname(constraintFileUri.fsPath);
-
         let searchDir = constraintDir;
         const workspaceRoot = vscode.workspace.getWorkspaceFolder(constraintFileUri)?.uri.fsPath;
 
         while (searchDir && searchDir !== workspaceRoot) {
             const metamodelsPath = path.join(searchDir, 'metamodels');
             if (fs.existsSync(metamodelsPath)) {
-                const ecorePattern = new vscode.RelativePattern(searchDir, 'metamodels/*.ecore');
-                const files = await vscode.workspace.findFiles(ecorePattern);
-                if (files.length > 0) {
-                    return files.map(uri => uri.fsPath);
-                }
+                // Ordner gefunden → direkt alle .ecore-Dateien darin zurückgeben,
+                // kein weiteres Hochlaufen, kein globaler Fallback
+                const entries = fs.readdirSync(metamodelsPath)
+                    .filter(f => f.endsWith('.ecore'))
+                    .map(f => path.join(metamodelsPath, f))
+                    .filter(f => fs.statSync(f).isFile());
+                return entries;
             }
             const parentDir = path.dirname(searchDir);
             if (parentDir === searchDir) break;
             searchDir = parentDir;
         }
+
+        // Kein metamodels-Ordner in der Hierarchie gefunden →
+        // Suche nur relativ zum Ordner der .ocl-Datei (nicht im gesamten Workspace)
+        const files = await vscode.workspace.findFiles(
+            new vscode.RelativePattern(constraintDir, '**/metamodels/*.ecore')
+        );
+        return files.map(uri => uri.fsPath);
     }
 
-    const files = await vscode.workspace.findFiles('**/metamodels/*.ecore');
-    return files.map(uri => uri.fsPath);
+    return [];
 }
 
 async function findInstanceFiles(constraintFileUri?: vscode.Uri): Promise<string[]> {
     if (constraintFileUri) {
         const constraintDir = path.dirname(constraintFileUri.fsPath);
-
         let searchDir = constraintDir;
         const workspaceRoot = vscode.workspace.getWorkspaceFolder(constraintFileUri)?.uri.fsPath;
 
         while (searchDir && searchDir !== workspaceRoot) {
             const instancesPath = path.join(searchDir, 'instances');
             if (fs.existsSync(instancesPath)) {
-                const instancePattern = new vscode.RelativePattern(searchDir, 'instances/*.*');
-                const files = await vscode.workspace.findFiles(instancePattern);
-                if (files.length > 0) {
-                    return files.map(uri => uri.fsPath);
-                }
+                // Ordner gefunden → direkt alle Dateien darin zurückgeben,
+                // kein weiteres Hochlaufen, kein globaler Fallback
+                const entries = fs.readdirSync(instancesPath)
+                    .filter(f => !f.startsWith('.'))
+                    .map(f => path.join(instancesPath, f))
+                    .filter(f => fs.statSync(f).isFile());
+                return entries;
             }
             const parentDir = path.dirname(searchDir);
             if (parentDir === searchDir) break;
             searchDir = parentDir;
         }
+
+        // Kein instances-Ordner in der Hierarchie gefunden →
+        // Suche nur relativ zum Ordner der .ocl-Datei (nicht im gesamten Workspace)
+        const files = await vscode.workspace.findFiles(
+            new vscode.RelativePattern(constraintDir, '**/instances/*.*')
+        );
+        return files.map(uri => uri.fsPath);
     }
 
-    const files = await vscode.workspace.findFiles('**/instances/*.*');
-    return files.map(uri => uri.fsPath);
+    return [];
 }
 
 let outputChannel: vscode.OutputChannel | undefined;
