@@ -142,7 +142,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.5</version>
                 <configuration>
                     <useModulePath>false</useModulePath>
                     <includes>
@@ -173,9 +173,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.6.3</version>
+                <version>3.12.0</version>
                 <configuration>
-                    <sourcepath>${project.basedir}/src/main/java:${project.build.directory}/generated-sources/antlr4</sourcepath>
+                    <sourcepath>
+                        ${project.basedir}/src/main/java:${project.build.directory}/generated-sources/antlr4</sourcepath>
                     <doclint>all,-missing</doclint>
                 </configuration>
             </plugin>
