@@ -15,6 +15,7 @@ package tools.vitruv.multimodelocl.pipeline;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.IdentityHashMap;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.*;
 import org.eclipse.emf.ecore.resource.Resource;
@@ -49,7 +50,16 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   /** Maps EClasses to all instances (including subtype instances) */
   private final Map<EClass, List<EObject>> instances = new HashMap<>();
 
-  /** Maps instance index to source filename for error reporting */
+  /**
+   * Maps each registered EObject to its source filename. Uses identity (not equals) so different
+   * objects from same file are tracked separately.
+   */
+  private final Map<EObject, String> instanceSourceFile = new IdentityHashMap<>();
+
+  /** Ordered list of context-level (root) EObjects for index-based lookup from evaluator. */
+  private final List<EObject> contextObjects = new ArrayList<>();
+
+  /** Maps instance index to source filename for error reporting (index matches contextObjects) */
   private final List<String> instanceFilenames = new ArrayList<>();
 
   /** EMF resource set for loading metamodels */
@@ -141,7 +151,10 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
     String filename = xmiPath.getFileName().toString();
 
     for (EObject root : resource.getContents()) {
-      addInstanceRecursive(root, filename);
+      addInstanceRecursiveInternal(root, filename);
+      // Register root as context candidate (one entry per root EObject per file)
+      contextObjects.add(root);
+      instanceFilenames.add(filename);
     }
   }
 
@@ -157,11 +170,19 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
 
   /** Recursively indexes instance and all contained objects by EClass. */
   private void addInstanceRecursive(EObject instance, String sourceFile) {
+    addInstanceRecursiveInternal(instance, sourceFile);
+  }
+
+  /**
+   * Internal recursive helper. All levels add to instances map and instanceSourceFile. Only
+   * top-level roots are registered in contextObjects/instanceFilenames.
+   */
+  private void addInstanceRecursiveInternal(EObject instance, String sourceFile) {
     instances.computeIfAbsent(instance.eClass(), k -> new ArrayList<>()).add(instance);
-    instanceFilenames.add(sourceFile);
+    instanceSourceFile.put(instance, sourceFile);
 
     for (EObject child : instance.eContents()) {
-      addInstanceRecursive(child, sourceFile);
+      addInstanceRecursiveInternal(child, sourceFile);
     }
   }
 
@@ -221,10 +242,11 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   }
 
   /**
-   * Returns the source filename for an instance at the given index.
+   * Returns source filename for the context object at the given evaluation index. Index corresponds
+   * to the i-th root EObject loaded (one per root per XMI file).
    *
-   * @param index The instance index (0-based, across all loaded instances)
-   * @return The filename (e.g., "spacecraft-atlas.spacemission"), or null if index out of bounds
+   * @param index The evaluation index (0-based, one per root context object)
+   * @return The filename (e.g., "spacecraft-atlas.spacemission"), or null if out of bounds
    */
   @Override
   public String getInstanceNameByIndex(int index) {
@@ -232,6 +254,19 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
       return instanceFilenames.get(index);
     }
     return null;
+  }
+
+  /**
+   * Returns the source filename for a specific EObject instance (by identity). More reliable than
+   * index-based lookup.
+   */
+  public String getSourceFileForInstance(EObject instance) {
+    return instanceSourceFile.get(instance);
+  }
+
+  /** Returns all registered context (root) objects in load order. */
+  public List<EObject> getContextObjects() {
+    return Collections.unmodifiableList(contextObjects);
   }
 
   /**
