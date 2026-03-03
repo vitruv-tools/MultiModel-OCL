@@ -465,6 +465,13 @@ public class BooleanTest {
             // TODO Auto-generated method stub
             throw new UnsupportedOperationException("Unimplemented method 'getAllRootObjects'");
           }
+
+          @Override
+          public EObject getContextObjectByIndex(int index) {
+            // TODO Auto-generated method stub
+            throw new UnsupportedOperationException(
+                "Unimplemented method 'getContextObjectByIndex'");
+          }
         };
 
     SymbolTable symbolTable = new SymbolTableImpl(dummySpec);
@@ -601,6 +608,13 @@ public class BooleanTest {
           public List<EObject> getAllRootObjects() {
             // TODO Auto-generated method stub
             throw new UnsupportedOperationException("Unimplemented method 'getAllRootObjects'");
+          }
+
+          @Override
+          public EObject getContextObjectByIndex(int index) {
+            // TODO Auto-generated method stub
+            throw new UnsupportedOperationException(
+                "Unimplemented method 'getContextObjectByIndex'");
           }
         };
 

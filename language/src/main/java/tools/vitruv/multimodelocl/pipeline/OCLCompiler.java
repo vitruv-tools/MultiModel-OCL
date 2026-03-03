@@ -39,6 +39,9 @@ import tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor;
  *
  * <p>Each pass accumulates errors in {@link ErrorCollector}. If any pass encounters errors,
  * subsequent passes are skipped. Supports compilation from strings, files, or paths.
+ *
+ * <p>After evaluation, the last {@link EvaluationVisitor} is accessible via {@link
+ * #getLastEvaluator()} to retrieve violating EObject instances for precise error reporting.
  */
 public class OCLCompiler {
 
@@ -50,6 +53,14 @@ public class OCLCompiler {
 
   /** Accumulates errors across all passes */
   private final ErrorCollector errors = new ErrorCollector();
+
+  /**
+   * Last evaluator instance — available after any {@code compile} call for violation introspection.
+   *
+   * <p>Callers can use {@code getLastEvaluator().getViolatingInstances()} to retrieve the concrete
+   * EObjects that violated the constraint, enabling precise per-instance violation messages.
+   */
+  private EvaluationVisitor lastEvaluator = null;
 
   /**
    * Creates compiler with metamodel access.
@@ -99,6 +110,7 @@ public class OCLCompiler {
     // PASS 3: Evaluation
     EvaluationVisitor evaluator =
         new EvaluationVisitor(symbolTable, wrapper, errors, typeChecker.getNodeTypes());
+    lastEvaluator = evaluator;
     return evaluator.visit(tree);
   }
 
@@ -144,6 +156,7 @@ public class OCLCompiler {
     // PASS 3: Evaluation
     EvaluationVisitor evaluator =
         new EvaluationVisitor(symbolTable, wrapper, errors, typeChecker.getNodeTypes());
+    lastEvaluator = evaluator;
     evaluator.visit(tree);
 
     return new ValidationResult(errors.getErrors(), java.util.List.of());
@@ -201,6 +214,7 @@ public class OCLCompiler {
     // PASS 3: Evaluation
     EvaluationVisitor evaluator =
         new EvaluationVisitor(symbolTable, wrapper, errors, typeChecker.getNodeTypes());
+    lastEvaluator = evaluator;
     Value result = evaluator.visit(tree);
 
     if (errors.hasErrors()) {
@@ -226,5 +240,17 @@ public class OCLCompiler {
    */
   public ErrorCollector getErrors() {
     return errors;
+  }
+
+  /**
+   * Returns the evaluator from the last {@code compile} call.
+   *
+   * <p>Use {@code getLastEvaluator().getViolatingInstances()} to retrieve the concrete EObjects
+   * that violated the constraint, for precise per-instance violation messages.
+   *
+   * @return The last EvaluationVisitor, or null if no evaluation has run yet
+   */
+  public EvaluationVisitor getLastEvaluator() {
+    return lastEvaluator;
   }
 }

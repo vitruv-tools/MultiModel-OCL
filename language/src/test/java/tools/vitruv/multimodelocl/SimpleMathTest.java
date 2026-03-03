@@ -666,6 +666,13 @@ public class SimpleMathTest {
             // TODO Auto-generated method stub
             throw new UnsupportedOperationException("Unimplemented method 'getAllRootObjects'");
           }
+
+          @Override
+          public EObject getContextObjectByIndex(int index) {
+            // TODO Auto-generated method stub
+            throw new UnsupportedOperationException(
+                "Unimplemented method 'getContextObjectByIndex'");
+          }
         };
 
     // Initialize 3-pass architecture

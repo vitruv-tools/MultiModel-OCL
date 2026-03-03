@@ -71,6 +71,14 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
    */
   private final ParseTreeProperty<Type> nodeTypes;
 
+  /**
+   * EObject instances that violated a constraint, in evaluation order.
+   *
+   * <p>Populated during {@link #visitClassifierContextCS}: one entry per instance where the
+   * invariant evaluated to false. Used by callers to produce precise violation messages.
+   */
+  private final List<EObject> violatingInstances = new ArrayList<>();
+
   /** Token stream for potential future use (e.g., accessing comments or whitespace). */
   private org.antlr.v4.runtime.TokenStream tokens;
 
@@ -242,7 +250,13 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
       for (OCLParser.InvCSContext inv : ctx.invCS()) {
         Value invResult = visit(inv);
         if (invResult != null && !invResult.isEmpty()) {
-          allResults.add(invResult.getElements().get(0));
+          OCLElement elem = invResult.getElements().get(0);
+          allResults.add(elem);
+          // Track violating instance for precise error reporting
+          Boolean boolResult = elem.tryGetBool();
+          if (boolResult == null || !boolResult) {
+            violatingInstances.add(instance);
+          }
         }
       }
 
@@ -250,6 +264,18 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     }
 
     return Value.of(allResults, Type.bag(Type.BOOLEAN));
+  }
+
+  /**
+   * Returns EObject instances that violated the constraint during evaluation.
+   *
+   * <p>Each entry corresponds to one invariant evaluation that returned false. Call after visiting
+   * the parse tree to retrieve violation context for precise error reporting.
+   *
+   * @return Unmodifiable list of violating EObjects in evaluation order
+   */
+  public List<EObject> getViolatingInstances() {
+    return Collections.unmodifiableList(violatingInstances);
   }
 
   // ==================== Control Flow ====================

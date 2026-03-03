@@ -446,6 +446,13 @@ public class OCLIsKindOfTest {
             // TODO Auto-generated method stub
             throw new UnsupportedOperationException("Unimplemented method 'getAllRootObjects'");
           }
+
+          @Override
+          public EObject getContextObjectByIndex(int index) {
+            // TODO Auto-generated method stub
+            throw new UnsupportedOperationException(
+                "Unimplemented method 'getContextObjectByIndex'");
+          }
         };
 
     // Initialize 3-pass architecture
@@ -521,6 +528,13 @@ public class OCLIsKindOfTest {
           public List<EObject> getAllRootObjects() {
             // TODO Auto-generated method stub
             throw new UnsupportedOperationException("Unimplemented method 'getAllRootObjects'");
+          }
+
+          @Override
+          public EObject getContextObjectByIndex(int index) {
+            // TODO Auto-generated method stub
+            throw new UnsupportedOperationException(
+                "Unimplemented method 'getContextObjectByIndex'");
           }
         };
 
@@ -812,6 +826,13 @@ public class OCLIsKindOfTest {
           public List<EObject> getAllRootObjects() {
             // TODO Auto-generated method stub
             throw new UnsupportedOperationException("Unimplemented method 'getAllRootObjects'");
+          }
+
+          @Override
+          public EObject getContextObjectByIndex(int index) {
+            // TODO Auto-generated method stub
+            throw new UnsupportedOperationException(
+                "Unimplemented method 'getContextObjectByIndex'");
           }
         };
 

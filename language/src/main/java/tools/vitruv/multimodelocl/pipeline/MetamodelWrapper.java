@@ -15,7 +15,6 @@ package tools.vitruv.multimodelocl.pipeline;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.IdentityHashMap;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.*;
 import org.eclipse.emf.ecore.resource.Resource;
@@ -156,6 +155,20 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
       contextObjects.add(root);
       instanceFilenames.add(filename);
     }
+  }
+
+  /**
+   * Returns the context EObject at the given evaluation index.
+   *
+   * @param index The evaluation index (0-based)
+   * @return The EObject at that index, or null if out of bounds
+   */
+  @Override
+  public EObject getContextObjectByIndex(int index) {
+    if (index >= 0 && index < contextObjects.size()) {
+      return contextObjects.get(index);
+    }
+    return null;
   }
 
   /**
