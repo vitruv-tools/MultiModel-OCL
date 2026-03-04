@@ -216,7 +216,7 @@ public sealed interface OCLElement
    * Compares two OCL elements for ordering. Used for normalizing unordered collections (Sets,
    * Bags).
    *
-   * <p>Order: Integers < Booleans < Strings < ObjectRefs < NestedCollections
+   * <p>Order: Integers &lt; Booleans &lt; Strings &lt; ObjectRefs &lt; NestedCollections
    */
   static int compare(OCLElement a, OCLElement b) {
     if (a == b) return 0;
