@@ -12,7 +12,9 @@
  *******************************************************************************/
 package tools.vitruv.multimodelocl.evaluator;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import org.eclipse.emf.ecore.EObject;
 import tools.vitruv.multimodelocl.typechecker.Type;
 
@@ -30,10 +32,10 @@ import tools.vitruv.multimodelocl.typechecker.Type;
  */
 public class Value {
 
-  /** The actual value - in OCL, this is ALWAYS List<OCLElement> */
+  /** The actual value - in OCL, this is ALWAYS List&lt;OCLElement&gt;. */
   private final List<OCLElement> elements;
 
-  /** The runtime type - includes Ctype information (unique, ordered) */
+  /** The runtime type - includes Ctype information (unique, ordered). */
   private final Type runtimeType;
 
   // ==================== Constructors ====================
@@ -45,7 +47,7 @@ public class Value {
   }
 
   /**
-   * Legacy constructor for backwards compatibility. If value is already List<OCLElement>, use it
+   * Legacy constructor for backwards compatibility. If value is already List of OCLElement, use it
    * directly. Otherwise, wrap it as a singleton OCLElement.
    */
   public Value(Object value, Type runtimeType) {

@@ -838,7 +838,7 @@ public class SymbolTableBuilder extends AbstractPhaseVisitor<Void> {
   }
 
   /**
-   * Visits a less-than comparison operation (<).
+   * Visits a less-than comparison operation (&lt;).
    *
    * @param ctx The less-than comparison parse tree node
    * @return null (void visitor)
@@ -851,7 +851,7 @@ public class SymbolTableBuilder extends AbstractPhaseVisitor<Void> {
   }
 
   /**
-   * Visits a less-than-or-equal comparison operation (<=).
+   * Visits a less-than-or-equal comparison operation (&lt;=).
    *
    * @param ctx The less-than-or-equal comparison parse tree node
    * @return null (void visitor)
@@ -864,7 +864,7 @@ public class SymbolTableBuilder extends AbstractPhaseVisitor<Void> {
   }
 
   /**
-   * Visits a greater-than comparison operation (>).
+   * Visits a greater-than comparison operation (&gt;).
    *
    * @param ctx The greater-than comparison parse tree node
    * @return null (void visitor)
@@ -877,7 +877,7 @@ public class SymbolTableBuilder extends AbstractPhaseVisitor<Void> {
   }
 
   /**
-   * Visits a greater-than-or-equal comparison operation (>=).
+   * Visits a greater-than-or-equal comparison operation (&gt;=).
    *
    * @param ctx The greater-than-or-equal comparison parse tree node
    * @return null (void visitor)

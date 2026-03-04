@@ -26,7 +26,7 @@ package tools.vitruv.multimodelocl.typechecker;
  *   <li>{@link #SET} ({@code {T}}): unordered, unique elements
  *   <li>{@link #SEQUENCE} ({@code [T]}): ordered, non-unique elements
  *   <li>{@link #BAG} ({@code {{T}}}): unordered, non-unique elements
- *   <li>{@link #ORDERED_SET} ({@code <T>}): ordered, unique elements
+ *   <li>{@link #ORDERED_SET} ({@code &lt;T&gt;}): ordered, unique elements
  * </ul>
  *
  * <p>This enum is used during type checking to reason about collection semantics and multiplicity
@@ -49,7 +49,7 @@ public enum Multiplicity {
   /** Unordered collection with non-unique elements ({@code {{T}}}). */
   BAG("{{", "}}"),
 
-  /** Ordered collection with unique elements ({@code <T>}). */
+  /** Ordered collection with unique elements ({@code &lt;T&gt;}). */
   ORDERED_SET("<", ">");
 
   /** Opening symbol used in the textual representation of the multiplicity. */
@@ -114,7 +114,7 @@ public enum Multiplicity {
    * <p>The conformance relation follows the OCL# subtyping rules:
    *
    * <pre>
-   * !T!  <:  ?T?  <:  {T}
+   * !T!  &lt;:  ?T?  &lt;:  {T}
    * </pre>
    *
    * <p>Intuitively:

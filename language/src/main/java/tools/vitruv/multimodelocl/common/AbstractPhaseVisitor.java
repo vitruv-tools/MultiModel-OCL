@@ -14,7 +14,6 @@ package tools.vitruv.multimodelocl.common;
 
 import org.antlr.v4.runtime.ParserRuleContext;
 import tools.vitruv.multimodelocl.OCLBaseVisitor;
-import tools.vitruv.multimodelocl.evaluator.EvaluationVisitor;
 import tools.vitruv.multimodelocl.pipeline.MetamodelWrapperInterface;
 import tools.vitruv.multimodelocl.symboltable.Symbol;
 import tools.vitruv.multimodelocl.symboltable.SymbolTable;
@@ -31,17 +30,14 @@ import tools.vitruv.multimodelocl.symboltable.SymbolTable;
  *   <li>Access to metamodel information via VSUM wrapper
  * </ul>
  *
- * <p>The generic type parameter {@code T} allows phase-specific return types: {@link
- * tools.vitruv.dsls.vitruvOCL.common.Type} for type checking and {@link
- * tools.vitruv.dsls.vitruvOCL.evaluator.Value} for evaluation.
+ * <p>The generic type parameter {@code T} allows phase-specific return types:
+ * tools.vitruv.dsls.vitruvOCL.common.Type for type checking and
+ * tools.vitruv.dsls.vitruvOCL.evaluator.Value for evaluation.
  *
  * <p>Subclasses must implement {@link #handleUndefinedSymbol(String, ParserRuleContext)} to provide
  * phase-appropriate error handling for unresolved variables.
  *
- * @param <T> Return type of visitor methods - {@code Type} for type checking phase, {@code Value}
- *     for evaluation phase
- * @see TypeCheckVisitor for Pass 2 implementation (type checking)
- * @see EvaluationVisitor for Pass 3 implementation (runtime evaluation)
+ * @param <T> The return type of the visitor methods, determined by the specific compilation phase
  */
 public abstract class AbstractPhaseVisitor<T> extends OCLBaseVisitor<T> {
 
