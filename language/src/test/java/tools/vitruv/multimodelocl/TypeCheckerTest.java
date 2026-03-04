@@ -14,14 +14,10 @@ package tools.vitruv.multimodelocl;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.util.List;
-import java.util.Set;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.ParseTreeProperty;
-import org.eclipse.emf.ecore.EClass;
-import org.eclipse.emf.ecore.EObject;
 import org.junit.jupiter.api.Test;
 import tools.vitruv.multimodelocl.common.ErrorCollector;
 import tools.vitruv.multimodelocl.pipeline.MetamodelWrapperInterface;
@@ -40,7 +36,7 @@ import tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor;
  * @see TypeCheckVisitor
  * @see Type
  */
-public class TypeCheckerTest {
+public class TypeCheckerTest extends DummyTestSpecification {
 
   // ==================== Literals ====================
 
@@ -1179,43 +1175,7 @@ public class TypeCheckerTest {
   private TypeCheckResult typeCheckWithErrors(String input, ErrorCollector errors) {
     ParseTree tree = parse(input);
 
-    MetamodelWrapperInterface dummySpec =
-        new MetamodelWrapperInterface() {
-          @Override
-          public EClass resolveEClass(String metamodel, String className) {
-            return null;
-          }
-
-          @Override
-          public List<EObject> getAllInstances(EClass eClass) {
-            return List.of();
-          }
-
-          @Override
-          public Set<String> getAvailableMetamodels() {
-            return Set.of();
-          }
-
-          @Override
-          public String getInstanceNameByIndex(int index) {
-            // TODO Auto-generated method stub
-            throw new UnsupportedOperationException(
-                "Unimplemented method 'getInstanceNameByIndex'");
-          }
-
-          @Override
-          public List<EObject> getAllRootObjects() {
-            // TODO Auto-generated method stub
-            throw new UnsupportedOperationException("Unimplemented method 'getAllRootObjects'");
-          }
-
-          @Override
-          public EObject getContextObjectByIndex(int index) {
-            // TODO Auto-generated method stub
-            throw new UnsupportedOperationException(
-                "Unimplemented method 'getContextObjectByIndex'");
-          }
-        };
+    MetamodelWrapperInterface dummySpec = buildDummySpec();
 
     SymbolTable symbolTable = new SymbolTableImpl(dummySpec);
     ScopeAnnotator scopeAnnotator = new ScopeAnnotator();
@@ -1235,10 +1195,9 @@ public class TypeCheckerTest {
     return new TypeCheckResult(tree, typeChecker.getNodeTypes());
   }
 
-  private ParseTree parse(String input) {
-    OCLLexer lexer = new OCLLexer(CharStreams.fromString(input));
-    CommonTokenStream tokens = new CommonTokenStream(lexer);
-    OCLParser parser = new OCLParser(tokens);
-    return parser.infixedExpCS();
+  @Override
+  protected ParseTree parse(String input) {
+    CommonTokenStream tokens = new CommonTokenStream(new OCLLexer(CharStreams.fromString(input)));
+    return new OCLParser(tokens).infixedExpCS();
   }
 }

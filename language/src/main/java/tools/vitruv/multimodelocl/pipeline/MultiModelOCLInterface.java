@@ -358,12 +358,16 @@ public class MultiModelOCLInterface {
 
     List<String> parts = new ArrayList<>();
     for (EStructuralFeature feature : instance.eClass().getEAllStructuralFeatures()) {
-      if (feature.isMany()) continue;
+      if (feature.isMany()) {
+        continue;
+      }
       Object value = instance.eGet(feature);
       if (value instanceof String || value instanceof Integer || value instanceof Boolean) {
         parts.add(feature.getName() + "=\"" + value + "\"");
       }
-      if (parts.size() >= 3) break;
+      if (parts.size() >= 3) {
+        break;
+      }
     }
 
     sb.append(String.join(", ", parts)).append(")");

@@ -212,13 +212,24 @@ public class VitruvOCLErrorHandlingTest {
 
     assertTrue(result.isSuccess(), "Compilation succeeds");
     assertFalse(result.isSatisfied(), "Not all instances satisfy");
-    assertTrue(
+
+    List<Warning> violations =
         result.getWarnings().stream()
-            .anyMatch(w -> w.getType() == Warning.WarningType.CONSTRAINT_VIOLATION),
-        "Should have constraint violation warning");
+            .filter(w -> w.getType() == Warning.WarningType.CONSTRAINT_VIOLATION)
+            .toList();
+
+    assertEquals(1, violations.size(), "Only inactive should violate, not active");
     assertTrue(
-        result.getWarnings().stream().anyMatch(w -> w.getMessage().contains("[VIOLATION]")),
-        "Should indicate which instances violated");
+        violations.get(0).getMessage().contains("[VIOLATION]"),
+        "Should use standard violation format");
+    assertTrue(
+        violations.get(0).getMessage().contains("Inactive-1")
+            || violations.get(0).getMessage().contains("SC-009"),
+        "Should identify the inactive instance as violating");
+    assertFalse(
+        violations.get(0).getMessage().contains("Active-1")
+            || violations.get(0).getMessage().contains("SC-008"),
+        "Should not report the active instance as violating");
   }
 
   /** Tests that constraints violated by all instances are correctly reported as unsatisfied. */
@@ -232,9 +243,13 @@ public class VitruvOCLErrorHandlingTest {
 
     assertTrue(result.isSuccess());
     assertFalse(result.isSatisfied());
-    assertTrue(
+
+    long violationCount =
         result.getWarnings().stream()
-            .anyMatch(w -> w.getType() == Warning.WarningType.CONSTRAINT_VIOLATION));
+            .filter(w -> w.getType() == Warning.WarningType.CONSTRAINT_VIOLATION)
+            .count();
+
+    assertEquals(2, violationCount, "Both inactive instances should each produce a violation");
   }
 
   /** Tests single-instance constraint violations. */
@@ -613,11 +628,11 @@ public class VitruvOCLErrorHandlingTest {
     assertEquals(1, violations.size(), "Should have exactly one violation");
 
     String message = violations.get(0).getMessage();
-    assertTrue(
-        message.contains("Spacecraft"),
-        "Violation should reference Spacecraft, not Mission or other container");
-    assertTrue(message.contains("operationalCheck"), "Violation should include constraint name");
     assertTrue(message.contains("[VIOLATION]"), "Violation should use standard format");
+    assertTrue(message.contains("operationalCheck"), "Violation should include constraint name");
+    assertTrue(message.contains("Spacecraft"), "Violation should reference Spacecraft");
+    assertFalse(
+        message.contains("Mission"), "Should not report violation on the Mission container");
   }
 
   /**
@@ -798,13 +813,15 @@ public class VitruvOCLErrorHandlingTest {
             .filter(w -> w.getType() == Warning.WarningType.CONSTRAINT_VIOLATION)
             .toList();
 
-    // spacecraft-voyager (SC-001) matches satellite-voyager → no violation
-    // spacecraft-active (SC-008) has no match → one violation
     assertEquals(1, violations.size(), "Only the non-matching Spacecraft should be reported");
     assertTrue(
         violations.get(0).getMessage().contains("SC-008")
             || violations.get(0).getMessage().contains("Active-1"),
         "Violation should identify the non-matching Spacecraft instance");
+    assertFalse(
+        violations.get(0).getMessage().contains("SC-001")
+            || violations.get(0).getMessage().contains("Voyager"),
+        "SC-001 (Voyager) matches and should not be reported");
   }
 
   /** Tests serialNumberMatch: when all Spacecraft have matching Satellites, no violations occur. */
@@ -858,15 +875,27 @@ public class VitruvOCLErrorHandlingTest {
     assertTrue(result.isSuccess(), "Should compile");
     assertFalse(result.isSatisfied(), "SC-008 and SC-009 have no matching satellites");
 
-    List<Warning> violations =
+    List<String> violationMessages =
         result.getWarnings().stream()
             .filter(w -> w.getType() == Warning.WarningType.CONSTRAINT_VIOLATION)
+            .map(Warning::getMessage)
             .toList();
 
-    // SC-001 (voyager) matches → no violation
-    // SC-008 (active) no match → violation
-    // SC-009 (inactive) no match → violation
-    assertEquals(2, violations.size(), "Should have one violation per non-matching instance");
+    // SC-001 (voyager) matches satellite-voyager → no violation
+    // SC-008 (active) has no matching satellite → violation
+    // SC-009 (inactive) has no matching satellite → violation
+    assertEquals(
+        2, violationMessages.size(), "Should have one violation per non-matching instance");
+
+    assertTrue(
+        violationMessages.stream().anyMatch(m -> m.contains("SC-008") || m.contains("Active-1")),
+        "SC-008 (Active-1) should be reported as violating");
+    assertTrue(
+        violationMessages.stream().anyMatch(m -> m.contains("SC-009") || m.contains("Inactive-1")),
+        "SC-009 (Inactive-1) should be reported as violating");
+    assertFalse(
+        violationMessages.stream().anyMatch(m -> m.contains("SC-001") || m.contains("Voyager")),
+        "SC-001 (Voyager) matches and should not be reported");
   }
 
   /**
@@ -897,13 +926,15 @@ public class VitruvOCLErrorHandlingTest {
             .filter(w -> w.getType() == Warning.WarningType.CONSTRAINT_VIOLATION)
             .toList();
 
-    // spacecraft-voyager: SC-001 matches AND operational → satisfied
-    // spacecraft-inactive: SC-009 no match AND not operational → violated
     assertEquals(1, violations.size(), "Only the inactive/non-matching spacecraft should violate");
     assertTrue(
         violations.get(0).getMessage().contains("Inactive-1")
             || violations.get(0).getMessage().contains("SC-009"),
         "Violation should identify the inactive instance");
+    assertFalse(
+        violations.get(0).getMessage().contains("SC-001")
+            || violations.get(0).getMessage().contains("Voyager"),
+        "Voyager matches and is operational — should not be reported");
   }
 
   /**
