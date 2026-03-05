@@ -40,7 +40,7 @@ import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;
  */
 public class MetamodelWrapper implements MetamodelWrapperInterface {
 
-  /** Default directory for test model files (legacy support) */
+  /** Default directory for test model files (legacy support). */
   public static Path TEST_MODELS_PATH = Path.of("test-models");
 
   /** Maps package names to loaded EPackages. */
@@ -50,7 +50,7 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   private final Map<EClass, List<EObject>> instances = new HashMap<>();
 
   /**
-   * Maps each registered EObject to its source filename. Uses identity (not equals) so different
+   * Maps each registered EObject to its source filename. Uses identity (not equals) so different.
    * objects from same file are tracked separately.
    */
   private final Map<EObject, String> instanceSourceFile = new IdentityHashMap<>();

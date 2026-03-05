@@ -52,19 +52,19 @@ public class BooleanTest extends DummyTestSpecification {
 
   // ==================== Unary NOT ====================
 
-  /** Tests negation of {@code true}. Truth table: ¬T = F */
+  /** Tests negation of {@code true}. Truth table: ¬T = F. */
   @Test
   public void testNotTrue() {
     assertSingleBool(compile("not true"), false);
   }
 
-  /** Tests negation of {@code false}. Truth table: ¬F = T */
+  /** Tests negation of {@code false}. Truth table: ¬F = T. */
   @Test
   public void testNotFalse() {
     assertSingleBool(compile("not false"), true);
   }
 
-  /** Tests double negation. Logical law: ¬¬A = A */
+  /** Tests double negation. Logical law: ¬¬A = A. */
   @Test
   public void testDoubleNegation() {
     assertSingleBool(compile("not not true"), true);
@@ -72,19 +72,19 @@ public class BooleanTest extends DummyTestSpecification {
 
   // ==================== AND ====================
 
-  /** Truth table: T ∧ T = T */
+  /** Truth table: T ∧ T = T. */
   @Test
   public void testTrueAndTrue() {
     assertSingleBool(compile("true and true"), true);
   }
 
-  /** Truth table: T ∧ F = F */
+  /** Truth table: T ∧ F = F. */
   @Test
   public void testTrueAndFalse() {
     assertSingleBool(compile("true and false"), false);
   }
 
-  /** Truth table: F ∧ F = F */
+  /** Truth table: F ∧ F = F. */
   @Test
   public void testFalseAndFalse() {
     assertSingleBool(compile("false and false"), false);
@@ -92,19 +92,19 @@ public class BooleanTest extends DummyTestSpecification {
 
   // ==================== OR ====================
 
-  /** Truth table: T ∨ F = T */
+  /** Truth table: T ∨ F = T. */
   @Test
   public void testTrueOrFalse() {
     assertSingleBool(compile("true or false"), true);
   }
 
-  /** Truth table: F ∨ F = F */
+  /** Truth table: F ∨ F = F. */
   @Test
   public void testFalseOrFalse() {
     assertSingleBool(compile("false or false"), false);
   }
 
-  /** Truth table: T ∨ T = T */
+  /** Truth table: T ∨ T = T. */
   @Test
   public void testTrueOrTrue() {
     assertSingleBool(compile("true or true"), true);
@@ -112,19 +112,19 @@ public class BooleanTest extends DummyTestSpecification {
 
   // ==================== XOR ====================
 
-  /** Truth table: T ⊕ F = T */
+  /** Truth table: T ⊕ F = T. */
   @Test
   public void testTrueXorFalse() {
     assertSingleBool(compile("true xor false"), true);
   }
 
-  /** Truth table: T ⊕ T = F */
+  /** Truth table: T ⊕ T = F. */
   @Test
   public void testTrueXorTrue() {
     assertSingleBool(compile("true xor true"), false);
   }
 
-  /** Truth table: F ⊕ F = F */
+  /** Truth table: F ⊕ F = F. */
   @Test
   public void testFalseXorFalse() {
     assertSingleBool(compile("false xor false"), false);
@@ -132,25 +132,25 @@ public class BooleanTest extends DummyTestSpecification {
 
   // ==================== IMPLIES ====================
 
-  /** Truth table: T → T = T */
+  /** Truth table: T → T = T. */
   @Test
   public void testTrueImpliesTrue() {
     assertSingleBool(compile("true implies true"), true);
   }
 
-  /** Truth table: T → F = F */
+  /** Truth table: T → F = F. */
   @Test
   public void testTrueImpliesFalse() {
     assertSingleBool(compile("true implies false"), false);
   }
 
-  /** Truth table: F → T = T (vacuous truth) */
+  /** Truth table: F → T = T (vacuous truth). */
   @Test
   public void testFalseImpliesTrue() {
     assertSingleBool(compile("false implies true"), true);
   }
 
-  /** Truth table: F → F = T (vacuous truth) */
+  /** Truth table: F → F = T (vacuous truth). */
   @Test
   public void testFalseImpliesFalse() {
     assertSingleBool(compile("false implies false"), true);

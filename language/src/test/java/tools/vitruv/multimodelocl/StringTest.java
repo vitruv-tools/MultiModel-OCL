@@ -34,19 +34,19 @@ public class StringTest extends DummyTestSpecification {
 
   // ==================== String Literals ====================
 
-  /** Tests basic string literal: {@code "hello"} → {@code ["hello"]} */
+  /** Tests basic string literal: {@code "hello"} → {@code ["hello"]}. */
   @Test
   public void testSimpleString() {
     assertSingleString(compile("\"hello\""), "hello");
   }
 
-  /** Tests empty string literal: {@code ""} → singleton {@code [""]} (not empty collection) */
+  /** Tests empty string literal: {@code ""} → singleton {@code [""]} (not empty collection). */
   @Test
   public void testEmptyString() {
     assertSingleString(compile("\"\""), "");
   }
 
-  /** Tests string with spaces: {@code "hello world"} → {@code ["hello world"]} */
+  /** Tests string with spaces: {@code "hello world"} → {@code ["hello world"]}. */
   @Test
   public void testStringWithSpaces() {
     assertSingleString(compile("\"hello world\""), "hello world");
@@ -54,31 +54,31 @@ public class StringTest extends DummyTestSpecification {
 
   // ==================== String Comparison ====================
 
-  /** Tests string equality (true): {@code "hello" == "hello"} → {@code [true]} */
+  /** Tests string equality (true): {@code "hello" == "hello"} → {@code [true]}. */
   @Test
   public void testStringEquality() {
     assertSingleBool(compile("\"hello\" == \"hello\""), true);
   }
 
-  /** Tests string inequality (true): {@code "hello" != "world"} → {@code [true]} */
+  /** Tests string inequality (true): {@code "hello" != "world"} → {@code [true]}. */
   @Test
   public void testStringInequalityTrue() {
     assertSingleBool(compile("\"hello\" != \"world\""), true);
   }
 
-  /** Tests string inequality (false): {@code "test" != "test"} → {@code [false]} */
+  /** Tests string inequality (false): {@code "test" != "test"} → {@code [false]}. */
   @Test
   public void testStringInequalityFalse() {
     assertSingleBool(compile("\"test\" != \"test\""), false);
   }
 
-  /** Tests lexicographic less-than: {@code "apple" < "banana"} → {@code [true]} */
+  /** Tests lexicographic less-than: {@code "apple" < "banana"} → {@code [true]}. */
   @Test
   public void testStringLessThan() {
     assertSingleBool(compile("\"apple\" < \"banana\""), true);
   }
 
-  /** Tests lexicographic greater-than: {@code "zebra" > "apple"} → {@code [true]} */
+  /** Tests lexicographic greater-than: {@code "zebra" > "apple"} → {@code [true]}. */
   @Test
   public void testStringGreaterThan() {
     assertSingleBool(compile("\"zebra\" > \"apple\""), true);
@@ -86,7 +86,7 @@ public class StringTest extends DummyTestSpecification {
 
   // ==================== String in Collections ====================
 
-  /** Tests Set with string elements: {@code Set{"a","b","c"}} → 3 elements */
+  /** Tests Set with string elements: {@code Set{"a","b","c"}} → 3 elements. */
   @Test
   public void testStringSet() {
     Value result = compile("Set{\"a\", \"b\", \"c\"}");
@@ -96,7 +96,7 @@ public class StringTest extends DummyTestSpecification {
     assertTrue(result.includes(new OCLElement.StringValue("c")));
   }
 
-  /** Tests size() on string Set: {@code Set{"hello","world"}.size()} → {@code [2]} */
+  /** Tests size() on string Set: {@code Set{"hello","world"}.size()} → {@code [2]}. */
   @Test
   public void testStringSetSize() {
     assertSingleInt(compile("Set{\"hello\", \"world\"}.size()"), 2);
@@ -104,7 +104,7 @@ public class StringTest extends DummyTestSpecification {
 
   /**
    * Tests includes() on string Set: {@code Set{"apple","banana"}.includes("apple")} → {@code
-   * [true]}
+   * [true]}.
    */
   @Test
   public void testStringSetIncludes() {
