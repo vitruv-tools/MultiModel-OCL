@@ -317,8 +317,8 @@ public class MultiModelOCLCLI {
           --xmi <files>         Comma-separated model instance files
 
         Examples:
-          vitruvocl check constraint.ocl --ecore spacemission.ecore
-          vitruvocl eval constraint.ocl --ecore model.ecore --xmi instance.xmi
+          vitruvocl check constraints.ocl --ecore spacemission.ecore
+          vitruvocl eval constraints.ocl --ecore model.ecore --xmi instance.xmi
           vitruvocl eval-batch constraints.ocl --ecore model.ecore --xmi instance.xmi
         """);
   }

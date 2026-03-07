@@ -31,7 +31,6 @@ grammars/
 # VSCode Extension
 vscode-extension/node_modules/
 vscode-extension/out/
-vscode-extension/*.vsix
 vscode-extension/.vscode-test/
 vscode-extension/npm-debug.log*
 vscode-extension/yarn-debug.log*
