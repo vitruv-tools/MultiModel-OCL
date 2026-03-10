@@ -24,7 +24,7 @@ import tools.vitruv.multimodelocl.typechecker.Type;
  * <p>Core OCL Principle: "Everything is a collection"
  *
  * <p>All values are represented as lists of elements: - Singleton: [elem] (¡τ! - exactly 1 element)
- * - Empty: [] (no τ - "kein Wert") - Multi-valued: [e1, e2, e3] (collections)
+ * - Empty: [] (no τ - "no Value") - Multi-valued: [e1, e2, e3] (collections)
  *
  * <p>The Type's Ctype properties determine how the list is interpreted: - {τ} (Set): Unique,
  * unordered - [τ] (Sequence): Non-unique, ordered - {{τ}} (Bag): Non-unique, unordered - ⟨τ⟩

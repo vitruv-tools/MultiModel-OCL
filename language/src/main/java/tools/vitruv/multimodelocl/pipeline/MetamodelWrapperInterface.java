@@ -64,4 +64,12 @@ public interface MetamodelWrapperInterface {
    * @return List of all root EObjects from all loaded resources
    */
   List<EObject> getAllRootObjects();
+
+  /**
+   * Returns the context EObject at the given evaluation index.
+   *
+   * @param index The evaluation index (0-based, one per root context object)
+   * @return The EObject at that index, or null if out of bounds
+   */
+  EObject getContextObjectByIndex(int index);
 }
