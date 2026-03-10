@@ -49,7 +49,7 @@ Organize your project following this convention:
 ```
 your-project/
 ├── constraints.ocl          # Your constraint definitions
-├── metamodels/              # Place .ecore files here
+├── ecore/                   # Place .ecore files here
 │   ├── model1.ecore
 │   └── model2.ecore
 └── instances/               # Place model instances here
@@ -60,7 +60,7 @@ your-project/
 
 **Notes:**
 - Instance files can have any extension (`.xmi`, `.model1`, custom extensions)
-- The extension will automatically discover all `.ecore` files in `metamodels/`
+- The extension will automatically discover all `.ecore` files in `ecore/`
 - All files in `instances/` will be loaded as model instances
 
 ### Your First Constraint
@@ -68,7 +68,7 @@ your-project/
 Create `constraints.ocl`:
 ```ocl
 -- Simple constraint: all spacecraft must have positive mass
-context spaceMission::Spacecraft inv positiveM ass:
+context spaceMission::Spacecraft inv positiveMass:
   self.mass > 0
 
 -- Cross-metamodel constraint: total satellite mass must exceed spacecraft mass
@@ -95,13 +95,13 @@ context spaceMission::Spacecraft inv satelliteMassCheck:
 ```bash
 # Evaluate all constraints in a project
 java -jar multimodelocl.jar eval-batch constraints.ocl \
-  --ecore metamodels/model1.ecore,metamodels/model2.ecore \
+  --ecore ecore/model1.ecore,ecore/model2.ecore \
   --xmi instances/instance1.xmi,instances/instance2.model1
 
 # Evaluate single constraint by name
 java -jar multimodelocl.jar eval constraints.ocl \
   --constraint myConstraintName \
-  --ecore metamodels/model1.ecore \
+  --ecore ecore/model1.ecore \
   --xmi instances/instance1.xmi
 ```
 
