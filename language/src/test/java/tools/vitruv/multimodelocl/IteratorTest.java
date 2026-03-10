@@ -45,7 +45,7 @@ public class IteratorTest extends DummyTestSpecification {
 
   // ==================== SELECT ====================
 
-  /** Tests basic select: {@code Set{1,2,3,4,5}.select(x | x > 2)} → {3,4,5} */
+  /** Tests basic select: {@code Set{1,2,3,4,5}.select(x | x > 2)} → {3,4,5}. */
   @Test
   public void testSelectBasic() {
     Value result = compile("Set{1,2,3,4,5}.select(x | x > 2)");
@@ -55,7 +55,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertIncludes(result, 5);
   }
 
-  /** Tests select where no elements match → empty collection */
+  /** Tests select where no elements match → empty collection. */
   @Test
   public void testSelectNoneMatch() {
     Value result = compile("Set{1,2,3}.select(x | x > 10)");
@@ -63,7 +63,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertSize(result, 0);
   }
 
-  /** Tests select where all elements match → full collection */
+  /** Tests select where all elements match → full collection. */
   @Test
   public void testSelectAllMatch() {
     Value result = compile("Set{1,2,3}.select(x | x > 0)");
@@ -73,7 +73,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertIncludes(result, 3);
   }
 
-  /** Tests select with compound AND predicate: {@code x > 3 and x < 8} → {4,5,6,7} */
+  /** Tests select with compound AND predicate: {@code x > 3 and x < 8} → {4,5,6,7}. */
   @Test
   public void testSelectComplexPredicate() {
     Value result = compile("Set{1,2,3,4,5,6,7,8,9,10}.select(x | x > 3 and x < 8)");
@@ -84,7 +84,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertIncludes(result, 7);
   }
 
-  /** Tests select with arithmetic in predicate: {@code x * 2 > 5} → {3,4,5} */
+  /** Tests select with arithmetic in predicate: {@code x * 2 > 5} → {3,4,5}. */
   @Test
   public void testSelectWithArithmetic() {
     Value result = compile("Set{1,2,3,4,5}.select(x | x * 2 > 5)");
@@ -94,7 +94,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertIncludes(result, 5);
   }
 
-  /** Tests select on Sequence: {@code Sequence{5,2,8,1,9,3}.select(x | x > 4)} → {5,8,9} */
+  /** Tests select on Sequence: {@code Sequence{5,2,8,1,9,3}.select(x | x > 4)} → {5,8,9}. */
   @Test
   public void testSelectOnSequence() {
     Value result = compile("Sequence{5,2,8,1,9,3}.select(x | x > 4)");
@@ -106,7 +106,7 @@ public class IteratorTest extends DummyTestSpecification {
 
   // ==================== REJECT ====================
 
-  /** Tests basic reject: {@code Set{1,2,3,4,5}.reject(x | x <= 2)} → {3,4,5} */
+  /** Tests basic reject: {@code Set{1,2,3,4,5}.reject(x | x <= 2)} → {3,4,5}. */
   @Test
   public void testRejectBasic() {
     Value result = compile("Set{1,2,3,4,5}.reject(x | x <= 2)");
@@ -116,7 +116,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertIncludes(result, 5);
   }
 
-  /** Tests reject where nothing is rejected → full collection */
+  /** Tests reject where nothing is rejected → full collection. */
   @Test
   public void testRejectNoneRejected() {
     Value result = compile("Set{1,2,3}.reject(x | x > 10)");
@@ -126,7 +126,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertIncludes(result, 3);
   }
 
-  /** Tests reject where all elements are rejected → empty collection */
+  /** Tests reject where all elements are rejected → empty collection. */
   @Test
   public void testRejectAllRejected() {
     Value result = compile("Set{1,2,3}.reject(x | x > 0)");
@@ -159,7 +159,7 @@ public class IteratorTest extends DummyTestSpecification {
 
   // ==================== COLLECT ====================
 
-  /** Tests basic collect: {@code Set{1,2,3}.collect(x | x * 2)} → {2,4,6} */
+  /** Tests basic collect: {@code Set{1,2,3}.collect(x | x * 2)} → {2,4,6}. */
   @Test
   public void testCollectBasic() {
     Value result = compile("Set{1,2,3}.collect(x | x * 2)");
@@ -169,7 +169,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertIncludes(result, 6);
   }
 
-  /** Tests collect with addition: {@code x + 10} → {11,12,13} */
+  /** Tests collect with addition: {@code x + 10} → {11,12,13}. */
   @Test
   public void testCollectWithAddition() {
     Value result = compile("Set{1,2,3}.collect(x | x + 10)");
@@ -179,7 +179,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertIncludes(result, 13);
   }
 
-  /** Tests collect with complex expression: {@code x * 2 + x} = 3x → {3,6,9} */
+  /** Tests collect with complex expression: {@code x * 2 + x} = 3x → {3,6,9}. */
   @Test
   public void testCollectComplexExpression() {
     Value result = compile("Set{1,2,3}.collect(x | x * 2 + x)");
@@ -189,7 +189,7 @@ public class IteratorTest extends DummyTestSpecification {
     assertIncludes(result, 9);
   }
 
-  /** Tests collect with division: {@code x / 2} → {1,2,3,4,5} */
+  /** Tests collect with division: {@code x / 2} → {1,2,3,4,5}. */
   @Test
   public void testCollectWithDivision() {
     Value result = compile("Set{2,4,6,8,10}.collect(x | x / 2)");

@@ -41,19 +41,19 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
 
   // ==================== Integer Type Checking ====================
 
-  /** Tests Integer is kind of Integer → {@code [true]} */
+  /** Tests Integer is kind of Integer → {@code [true]}. */
   @Test
   public void testIntegerIsKindOfInteger() {
     assertSingleBool(compile("Set{5}.oclIsKindOf(Integer)"), true);
   }
 
-  /** Tests Integer is NOT kind of String → {@code [false]} */
+  /** Tests Integer is NOT kind of String → {@code [false]}. */
   @Test
   public void testIntegerIsKindOfString() {
     assertSingleBool(compile("Set{5}.oclIsKindOf(String)"), false);
   }
 
-  /** Tests Integer is NOT kind of Boolean → {@code [false]} */
+  /** Tests Integer is NOT kind of Boolean → {@code [false]}. */
   @Test
   public void testIntegerIsKindOfBoolean() {
     assertSingleBool(compile("Set{5}.oclIsKindOf(Boolean)"), false);
@@ -61,19 +61,19 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
 
   // ==================== String Type Checking ====================
 
-  /** Tests String is kind of String → {@code [true]} */
+  /** Tests String is kind of String → {@code [true]}. */
   @Test
   public void testStringIsKindOfString() {
     assertSingleBool(compile("Set{\"hello\"}.oclIsKindOf(String)"), true);
   }
 
-  /** Tests String is NOT kind of Integer → {@code [false]} */
+  /** Tests String is NOT kind of Integer → {@code [false]}. */
   @Test
   public void testStringIsKindOfInteger() {
     assertSingleBool(compile("Set{\"hello\"}.oclIsKindOf(Integer)"), false);
   }
 
-  /** Tests String is NOT kind of Boolean → {@code [false]} */
+  /** Tests String is NOT kind of Boolean → {@code [false]}. */
   @Test
   public void testStringIsKindOfBoolean() {
     assertSingleBool(compile("Set{\"hello\"}.oclIsKindOf(Boolean)"), false);
@@ -81,19 +81,19 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
 
   // ==================== Boolean Type Checking ====================
 
-  /** Tests Boolean is kind of Boolean → {@code [true]} */
+  /** Tests Boolean is kind of Boolean → {@code [true]}. */
   @Test
   public void testBooleanIsKindOfBoolean() {
     assertSingleBool(compile("Set{true}.oclIsKindOf(Boolean)"), true);
   }
 
-  /** Tests Boolean is NOT kind of Integer → {@code [false]} */
+  /** Tests Boolean is NOT kind of Integer → {@code [false]}. */
   @Test
   public void testBooleanIsKindOfInteger() {
     assertSingleBool(compile("Set{true}.oclIsKindOf(Integer)"), false);
   }
 
-  /** Tests Boolean is NOT kind of String → {@code [false]} */
+  /** Tests Boolean is NOT kind of String → {@code [false]}. */
   @Test
   public void testBooleanIsKindOfString() {
     assertSingleBool(compile("Set{false}.oclIsKindOf(String)"), false);
@@ -101,7 +101,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
 
   // ==================== Multiple Elements ====================
 
-  /** Tests all Integer elements → all true: {@code Set{1,2,3}.oclIsKindOf(Integer)} */
+  /** Tests all Integer elements → all true: {@code Set{1,2,3}.oclIsKindOf(Integer)}. */
   @Test
   public void testMultipleIntegersIsKindOfInteger() {
     Value result = compile("Set{1, 2, 3}.oclIsKindOf(Integer)");
@@ -111,7 +111,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
     }
   }
 
-  /** Tests Integer elements checked against String → all false */
+  /** Tests Integer elements checked against String → all false. */
   @Test
   public void testMultipleIntegersIsKindOfString() {
     Value result = compile("Set{1, 2, 3}.oclIsKindOf(String)");
@@ -121,7 +121,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
     }
   }
 
-  /** Tests all String elements → all true */
+  /** Tests all String elements → all true. */
   @Test
   public void testMultipleStringsIsKindOfString() {
     Value result = compile("Set{\"a\", \"b\", \"c\"}.oclIsKindOf(String)");
@@ -131,7 +131,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
     }
   }
 
-  /** Tests Boolean Set with duplicates: {true,false,true} → 2 elements, both true */
+  /** Tests Boolean Set with duplicates: {true,false,true} → 2 elements, both true. */
   @Test
   public void testMultipleBooleansIsKindOfBoolean() {
     Value result = compile("Set{true, false, true}.oclIsKindOf(Boolean)");
@@ -143,7 +143,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
 
   // ==================== Empty Collection ====================
 
-  /** Tests empty collection → empty result */
+  /** Tests empty collection → empty result. */
   @Test
   public void testEmptyCollectionIsKindOf() {
     assertSize(compile("Set{}.oclIsKindOf(Integer)"), 0);
@@ -151,7 +151,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
 
   // ==================== Sequence Preservation ====================
 
-  /** Tests Sequence order preserved: {@code Sequence{1,2,3}.oclIsKindOf(Integer)} → all true */
+  /** Tests Sequence order preserved: {@code Sequence{1,2,3}.oclIsKindOf(Integer)} → all true. */
   @Test
   public void testSequencePreservesOrder() {
     Value result = compile("Sequence{1, 2, 3}.oclIsKindOf(Integer)");
@@ -208,7 +208,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
 
   // ==================== Mixed Type Collections ====================
 
-  /** Tests mixed types checking for Integer: {1,"hello",true} → {true,false,false} */
+  /** Tests mixed types checking for Integer: {1,"hello",true} → {true,false,false}. */
   @Test
   public void testMixedTypesInCollection() {
     Value result = compile("Sequence{1, \"hello\", true}.oclIsKindOf(Integer)");
@@ -219,7 +219,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
     assertFalse(((OCLElement.BoolValue) elements.get(2)).value());
   }
 
-  /** Tests mixed types checking for String: {1,"hello",true,"world"} → {false,true,false,true} */
+  /** Tests mixed types checking for String: {1,"hello",true,"world"} → {false,true,false,true}. */
   @Test
   public void testMixedTypesCheckingForString() {
     Value result = compile("Sequence{1, \"hello\", true, \"world\"}.oclIsKindOf(String)");
@@ -231,7 +231,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
     assertTrue(((OCLElement.BoolValue) elements.get(3)).value());
   }
 
-  /** Tests {1,"test",true}.oclIsKindOf(Boolean) → exactly one true */
+  /** Tests {1,"test",true}.oclIsKindOf(Boolean) → exactly one true. */
   @Test
   public void testAllDifferentTypesCheckBoolean() {
     Value result = compile("Set{1, \"test\", true}.oclIsKindOf(Boolean)");
@@ -243,7 +243,7 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
     assertEquals(1, trueCount, "Exactly one element should be Boolean");
   }
 
-  /** Tests all Strings checked against Integer → all false */
+  /** Tests all Strings checked against Integer → all false. */
   @Test
   public void testEmptyResultFromMixedCollection() {
     Value result = compile("Set{\"hello\", \"world\", \"test\"}.oclIsKindOf(Integer)");
@@ -254,7 +254,8 @@ public class OCLIsKindOfTest extends DummyTestSpecification {
   }
 
   /**
-   * Tests flatten then oclIsKindOf on nested mixed collection → {true,true,false,false,false,false}
+   * Tests flatten then oclIsKindOf on nested mixed collection →
+   * {true,true,false,false,false,false}.
    */
   @Test
   public void testNestedCollectionsWithMixedTypes() {
