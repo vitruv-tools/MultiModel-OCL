@@ -35,7 +35,7 @@ import tools.vitruv.dsls.vitruvOCL.pipeline.*;
  * <pre>
  * project/
  *   constraints.ocl              - OCL constraint definitions
- *   metamodels/
+ *   ecore/
  *     spaceMission.ecore         - Metamodel files
  *     satelliteSystem.ecore
  *   instances/
@@ -47,7 +47,7 @@ import tools.vitruv.dsls.vitruvOCL.pipeline.*;
  *
  * <ul>
  *   <li>{@code constraints.ocl} - Must contain valid OCL constraints starting with {@code context}
- *   <li>{@code metamodels/} directory - Must contain at least one {@code .ecore} file
+ *   <li>{@code ecore/} directory - Must contain at least one {@code .ecore} file
  *   <li>{@code instances/} directory - Must contain model instance files with appropriate
  *       extensions
  * </ul>
@@ -94,7 +94,7 @@ public class Main {
    *
    * <ul>
    *   <li>{@code ./constraints.ocl} - Constraint definitions file
-   *   <li>{@code ./metamodels/} - Directory with {@code .ecore} files
+   *   <li>{@code ./ecore/} - Directory with {@code .ecore} files
    *   <li>{@code ./instances/} - Directory with model instance files
    * </ul>
    *
@@ -121,7 +121,7 @@ public class Main {
    *
    * <ul>
    *   <li>First argument: Path to constraints file (e.g., {@code constraints.ocl})
-   *   <li>Second argument: Root directory containing {@code metamodels/} and {@code instances/}
+   *   <li>Second argument: Root directory containing {@code ecore/} and {@code instances/}
    *       subdirectories
    * </ul>
    *
@@ -166,7 +166,7 @@ public class Main {
         VitruvOCL.evaluateConstraints(
             Path.of("constraints.ocl"),
             new Path[] {
-              Path.of("metamodels/spaceMission.ecore"), Path.of("metamodels/satelliteSystem.ecore")
+              Path.of("ecore/spaceMission.ecore"), Path.of("ecore/satelliteSystem.ecore")
             },
             new Path[] {
               Path.of("instances/spacecraft-voyager.spacemission"),
