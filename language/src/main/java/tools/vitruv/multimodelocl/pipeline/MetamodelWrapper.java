@@ -15,7 +15,6 @@ package tools.vitruv.multimodelocl.pipeline;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.IdentityHashMap;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.*;
 import org.eclipse.emf.ecore.resource.Resource;
@@ -44,14 +43,14 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   /** Default directory for test model files (legacy support). */
   public static Path TEST_MODELS_PATH = Path.of("test-models");
 
-  /** Maps package names to loaded EPackages */
+  /** Maps package names to loaded EPackages. */
   private final Map<String, EPackage> metamodelRegistry = new HashMap<>();
 
   /** Maps EClasses to all instances (including subtype instances). */
   private final Map<EClass, List<EObject>> instances = new HashMap<>();
 
   /**
-   * Maps each registered EObject to its source filename. Uses identity (not equals) so different
+   * Maps each registered EObject to its source filename. Uses identity (not equals) so different.
    * objects from same file are tracked separately.
    */
   private final Map<EObject, String> instanceSourceFile = new IdentityHashMap<>();
@@ -159,6 +158,20 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   }
 
   /**
+   * Returns the context EObject at the given evaluation index.
+   *
+   * @param index The evaluation index (0-based)
+   * @return The EObject at that index, or null if out of bounds
+   */
+  @Override
+  public EObject getContextObjectByIndex(int index) {
+    if (index >= 0 && index < contextObjects.size()) {
+      return contextObjects.get(index);
+    }
+    return null;
+  }
+
+  /**
    * Loads model instance from TEST_MODELS_PATH directory (legacy method).
    *
    * @param xmiFileName Filename relative to TEST_MODELS_PATH
@@ -166,11 +179,6 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
    */
   public void loadModelInstance(String xmiFileName) throws IOException {
     loadModelInstance(TEST_MODELS_PATH.resolve(xmiFileName));
-  }
-
-  /** Recursively indexes instance and all contained objects by EClass. */
-  private void addInstanceRecursive(EObject instance, String sourceFile) {
-    addInstanceRecursiveInternal(instance, sourceFile);
   }
 
   /**
@@ -184,11 +192,6 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
     for (EObject child : instance.eContents()) {
       addInstanceRecursiveInternal(child, sourceFile);
     }
-  }
-
-  /** Legacy method for backward compatibility. */
-  private void addInstanceRecursive(EObject instance) {
-    addInstanceRecursive(instance, "unknown");
   }
 
   /**

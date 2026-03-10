@@ -18,9 +18,11 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.eclipse.emf.ecore.EObject;
+import org.eclipse.emf.ecore.EStructuralFeature;
 import tools.vitruv.multimodelocl.common.CompileError;
 import tools.vitruv.multimodelocl.common.ErrorSeverity;
-import tools.vitruv.multimodelocl.evaluator.OCLElement;
+import tools.vitruv.multimodelocl.evaluator.EvaluationVisitor;
 import tools.vitruv.multimodelocl.evaluator.Value;
 
 /**
@@ -46,7 +48,7 @@ import tools.vitruv.multimodelocl.evaluator.Value;
  * VitruvOCL constraints must begin with {@code context} keyword:
  *
  * <pre>
- * context MetamodelName::ClassName inv:
+ * context MetamodelName::ClassName inv constraintName:
  *   expression
  * </pre>
  *
@@ -59,128 +61,14 @@ import tools.vitruv.multimodelocl.evaluator.Value;
  *   <li>All values are collections (singletons like {@code [5]} or empty {@code []})
  * </ul>
  *
- * <h2>Usage Examples</h2>
+ * <h2>Violation Reporting</h2>
  *
- * <h3>Single Constraint Evaluation</h3>
- *
- * <pre>{@code
- * // Within-metamodel constraint
- * ConstraintResult result = VitruvOCL.evaluateConstraint(
- *     "context spaceMission::Spacecraft inv: self.mass > 0",
- *     new Path[]{Path.of("spacemission.ecore")},
- *     new Path[]{Path.of("voyager.spacemission")}
- * );
- *
- * if (result.isSuccess() && result.isSatisfied()) {
- *     System.out.println("Constraint satisfied!");
- * } else {
- *     result.getCompilerErrors().forEach(System.err::println);
- *     result.getWarnings().forEach(System.err::println);
- * }
- * }</pre>
- *
- * <h3>Cross-Metamodel Constraint</h3>
- *
- * <pre>{@code
- * // Reference entities from different metamodels
- * String constraint = """
- *     context spaceMission::Spacecraft inv:
- *       satelliteSystem::Satellite.allInstances().collect(sat |
- *         sat.massKg
- *       ).sum() > self.mass
- *     """;
- *
- * ConstraintResult result = VitruvOCL.evaluateConstraint(
- *     constraint,
- *     new Path[]{
- *         Path.of("spacemission.ecore"),
- *         Path.of("satellitesystem.ecore")
- *     },
- *     new Path[]{
- *         Path.of("voyager.spacemission"),
- *         Path.of("atlas.satellitesystem")
- *     }
- * );
- * }</pre>
- *
- * <h3>Batch Evaluation from File</h3>
- *
- * <pre>{@code
- * // constraints.ocl contains multiple constraints
- * BatchValidationResult results = VitruvOCL.evaluateConstraints(
- *     Path.of("constraints.ocl"),
- *     new Path[]{Path.of("model.ecore")},
- *     new Path[]{Path.of("instance.xmi")}
- * );
- *
- * System.out.println("Satisfied: " + results.getSatisfiedCount());
- * System.out.println("Violated: " + results.getViolatedCount());
- * }</pre>
- *
- * <h3>Project-Based Evaluation (Convention over Configuration)</h3>
+ * <p>When a constraint is violated, one {@link Warning} of type {@code CONSTRAINT_VIOLATION} is
+ * emitted per violating instance, in the format:
  *
  * <pre>
- * project/
- *   constraints.ocl              - Constraint definitions
- *   metamodels/
- *     spacemission.ecore
- *     satellitesystem.ecore
- *   instances/
- *     voyager.spacemission
- *     atlas.satellitesystem
+ * [VIOLATION] constraintName @ filename :: ClassName(attr1="val1", attr2="val2")
  * </pre>
- *
- * <pre>{@code
- * BatchValidationResult results = VitruvOCL.evaluateProject(
- *     Path.of("project")
- * );
- * }</pre>
- *
- * <h2>Constraint File Format</h2>
- *
- * Multiple constraints can be defined in a single file:
- *
- * <pre>
- * -- Comments start with double dash
- * context spaceMission::Spacecraft inv:
- *   self.mass > 0
- *
- * context satelliteSystem::Satellite inv:
- *   self.serialNumber.size() > 0
- * </pre>
- *
- * <p>Each constraint must begin with {@code context} keyword. Lines starting with {@code --} are
- * treated as comments and ignored.
- *
- * <h2>Result Interpretation</h2>
- *
- * {@link ConstraintResult} provides multiple status indicators:
- *
- * <ul>
- *   <li>{@code isSuccess()} - No file loading or compilation errors occurred
- *   <li>{@code isSatisfied()} - Constraint evaluated to true for all instances
- *   <li>{@code getCompilerErrors()} - Syntax or type checking errors
- *   <li>{@code getFileErrors()} - Metamodel or instance loading failures
- *   <li>{@code getWarnings()} - Non-fatal issues (violations, duplicates, unused metamodels)
- * </ul>
- *
- * <p><b>Important:</b> {@code isSatisfied() == false} indicates constraint violation (instances
- * exist where the constraint evaluates to false), not compilation errors. Check {@code isSuccess()}
- * first to ensure the constraint was successfully evaluated.
- *
- * <h2>File Extensions</h2>
- *
- * Model instance files use extensions matching their metamodel name:
- *
- * <ul>
- *   <li>{@code .ecore} - Metamodel definitions
- *   <li>{@code .xmi} - Generic EMF instances
- *   <li>{@code .spacemission} - Instances of spaceMission metamodel
- *   <li>{@code .satellitesystem} - Instances of satelliteSystem metamodel
- * </ul>
- *
- * <p>The extension after the dot corresponds to the metamodel package name (e.g., {@code
- * spaceMission.ecore} creates instances with {@code .spacemission} extension).
  *
  * @see ConstraintResult for single constraint evaluation results
  * @see BatchValidationResult for multi-constraint validation results
@@ -198,8 +86,9 @@ public class MultiModelOCLInterface {
    *   <li>Runtime evaluation against model instances
    * </ol>
    *
-   * <p>The constraint is evaluated for each instance of the context type. Result indicates whether
-   * ALL instances satisfy the constraint.
+   * <p>For each instance of the context type that violates the constraint, a separate {@link
+   * Warning} of type {@code CONSTRAINT_VIOLATION} is added to the result, identifying the source
+   * file and the concrete instance by its attribute values.
    *
    * @param constraint OCL constraint expression (must start with {@code context})
    * @param ecoreFiles Metamodel definition files (.ecore)
@@ -239,35 +128,24 @@ public class MultiModelOCLInterface {
           constraint, false, compilerErrors, loadResult.fileErrors, loadResult.warnings);
     }
 
-    boolean satisfied = true;
-    List<Integer> violatingIndices = new ArrayList<>();
     List<Warning> warnings = new ArrayList<>(loadResult.warnings);
 
-    for (int i = 0; i < result.size(); i++) {
-      OCLElement elem = result.getElements().get(i);
-      if (elem instanceof OCLElement.BoolValue boolVal) {
-        if (!boolVal.value()) {
-          satisfied = false;
-          violatingIndices.add(i);
-        }
-      } else {
-        satisfied = false;
-        violatingIndices.add(i);
-      }
-    }
+    // Retrieve violating EObjects directly from the evaluator
+    EvaluationVisitor evaluator = compiler.getLastEvaluator();
+    List<EObject> violatingInstances =
+        evaluator != null ? evaluator.getViolatingInstances() : List.of();
 
-    if (!violatingIndices.isEmpty()) {
-      // Hole Instanznamen aus dem Wrapper
-      List<String> instanceNames = new ArrayList<>();
-      for (int idx : violatingIndices) {
-        String name = loadResult.wrapper.getInstanceNameByIndex(idx); // NEU
-        instanceNames.add(name != null ? name : "index_" + idx);
-      }
+    boolean satisfied = violatingInstances.isEmpty();
 
+    for (EObject instance : violatingInstances) {
+      String sourceFile = loadResult.wrapper.getSourceFileForInstance(instance);
+      String filename = sourceFile != null ? sourceFile : "unknown";
+      String instanceLabel = describeInstance(instance);
+      String constraintName = extractConstraintName(constraint);
       warnings.add(
           new Warning(
               Warning.WarningType.CONSTRAINT_VIOLATION,
-              "Constraint violated for instances: " + instanceNames));
+              "[VIOLATION] " + constraintName + " @ " + filename + " :: " + instanceLabel));
     }
 
     return new ConstraintResult(
@@ -346,25 +224,27 @@ public class MultiModelOCLInterface {
    *
    * <pre>
    * projectDir/
-   *   constraints.ocl       - Constraint definitions
-   *   metamodels/           - All .ecore files
-   *   instances/            - All model instance files
+   *   model/src/main/
+   *     constraints.ocl       - Constraint definitions
+   *     ecore/               - All .ecore files
+   *     instances/           - All model instance files
    * </pre>
    *
    * <p>Automatically discovers all metamodels and instances in respective directories. Instance
    * files can have any EMF-compatible extension (.xmi, .spacemission, .satellitesystem, etc.).
    *
-   * @param projectDir Root directory containing conventional structure
+   * @param projectDir Root directory of the project
    * @return Batch validation result for all constraints
    * @throws IOException If files cannot be read or required directories don't exist
    */
   public static BatchValidationResult evaluateProject(Path projectDir) throws IOException {
-    Path constraintsFile = projectDir.resolve("constraints.ocl");
-    Path metamodelsDir = projectDir.resolve("metamodels");
-    Path instancesDir = projectDir.resolve("instances");
+    Path mainDir = projectDir.resolve("model/src/main");
+    Path constraintsFile = mainDir.resolve("constraints.ocl");
+    Path ecoreDir = mainDir.resolve("ecore");
+    Path instancesDir = mainDir.resolve("instances");
 
-    Path[] ecoreFiles = collectFiles(metamodelsDir, ".ecore");
-    Path[] xmiFiles = collectFiles(instancesDir, ".xmi", ".spacemission", ".satellitesystem");
+    Path[] ecoreFiles = collectFiles(ecoreDir, ".ecore");
+    Path[] xmiFiles = collectAllFiles(instancesDir);
 
     return evaluateConstraints(constraintsFile, ecoreFiles, xmiFiles);
   }
@@ -372,21 +252,22 @@ public class MultiModelOCLInterface {
   /**
    * Evaluates project with custom constraint file location.
    *
-   * <p>Uses convention-over-configuration for metamodels and instances, but allows constraints file
-   * to be located anywhere.
+   * <p>Uses convention-over-configuration for metamodels and instances under {@code
+   * resourcesDir/model/src/main/}, but allows the constraints file to be located anywhere.
    *
    * @param constraintsFile Path to constraints file
-   * @param resourcesDir Directory containing metamodels/ and instances/ subdirectories
+   * @param resourcesDir Root directory containing model/src/main/ecore and model/src/main/instances
    * @return Batch validation result
    * @throws IOException If files cannot be read
    */
   public static BatchValidationResult evaluateProject(Path constraintsFile, Path resourcesDir)
       throws IOException {
-    Path metamodelsDir = resourcesDir.resolve("metamodels");
-    Path instancesDir = resourcesDir.resolve("instances");
+    Path mainDir = resourcesDir.resolve("model/src/main");
+    Path ecoreDir = mainDir.resolve("ecore");
+    Path instancesDir = mainDir.resolve("instances");
 
-    Path[] ecoreFiles = collectFiles(metamodelsDir, ".ecore");
-    Path[] xmiFiles = collectFiles(instancesDir, ".xmi", ".spacemission", ".satellitesystem");
+    Path[] ecoreFiles = collectFiles(ecoreDir, ".ecore");
+    Path[] xmiFiles = collectAllFiles(instancesDir);
 
     return evaluateConstraints(constraintsFile, ecoreFiles, xmiFiles);
   }
@@ -460,6 +341,71 @@ public class MultiModelOCLInterface {
               .collect(Collectors.toList());
 
       return files.toArray(new Path[0]);
+    }
+  }
+
+  /**
+   * Produces a human-readable label for an EObject, using its EClass name and up to 3 primitive
+   * attribute values as identifiers.
+   *
+   * <p>Example output: {@code Spacecraft(name="Apollo", serialNumber="SC-004")}
+   *
+   * @param instance The model instance to describe
+   * @return Human-readable instance label
+   */
+  private static String describeInstance(EObject instance) {
+    StringBuilder sb = new StringBuilder(instance.eClass().getName()).append("(");
+
+    List<String> parts = new ArrayList<>();
+    for (EStructuralFeature feature : instance.eClass().getEAllStructuralFeatures()) {
+      if (feature.isMany()) {
+        continue;
+      }
+      Object value = instance.eGet(feature);
+      if (value instanceof String || value instanceof Integer || value instanceof Boolean) {
+        parts.add(feature.getName() + "=\"" + value + "\"");
+      }
+      if (parts.size() >= 3) {
+        break;
+      }
+    }
+
+    sb.append(String.join(", ", parts)).append(")");
+    return sb.toString();
+  }
+
+  /**
+   * Extracts the constraint name (inv name) from the constraint source string.
+   *
+   * <p>Example: {@code "context spaceMission::Spacecraft inv serialInclusion:\n ..."} → {@code
+   * "serialInclusion"}. Falls back to {@code "unnamed"} if no name is found.
+   *
+   * @param constraint The OCL constraint source string
+   * @return The invariant name, or "unnamed" if not found
+   */
+  private static String extractConstraintName(String constraint) {
+    java.util.regex.Matcher m =
+        java.util.regex.Pattern.compile("inv\\s+(\\w+)\\s*:").matcher(constraint);
+    return m.find() ? m.group(1) : "unnamed";
+  }
+
+  /**
+   * Recursively collects all files from a directory regardless of extension.
+   *
+   * <p>Returns empty array if directory doesn't exist (allowing graceful handling of optional
+   * directories).
+   *
+   * @param directory Directory to search recursively
+   * @return Array of all file paths, empty if directory doesn't exist
+   * @throws IOException If directory traversal fails
+   */
+  private static Path[] collectAllFiles(Path directory) throws IOException {
+    if (!Files.exists(directory) || !Files.isDirectory(directory)) {
+      return new Path[0];
+    }
+
+    try (Stream<Path> stream = Files.walk(directory)) {
+      return stream.filter(Files::isRegularFile).collect(Collectors.toList()).toArray(new Path[0]);
     }
   }
 }
