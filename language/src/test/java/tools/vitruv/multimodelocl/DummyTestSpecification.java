@@ -23,6 +23,17 @@ import tools.vitruv.multimodelocl.symboltable.SymbolTableBuilder;
 import tools.vitruv.multimodelocl.symboltable.SymbolTableImpl;
 import tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor;
 
+/**
+ * Abstract base class for OCL expression tests, providing a shared compilation pipeline and
+ * assertion utilities.
+ *
+ * <p>Subclasses can use {@link #compile(String)} to run OCL expressions through the full
+ * three-phase pipeline (parsing, type checking, evaluation) against a dummy metamodel, and the
+ * provided {@code assert*} helpers to verify the resulting {@link Value}.
+ *
+ * <p>Intended for unit tests that do not require a real metamodel context, such as collection,
+ * arithmetic, boolean, and string expression tests.
+ */
 public abstract class DummyTestSpecification {
 
   /**
@@ -229,6 +240,15 @@ public abstract class DummyTestSpecification {
         result.includes(new OCLElement.IntValue(value)), "Expected collection to exclude " + value);
   }
 
+  /**
+   * Creates a no-op {@link MetamodelWrapperInterface} for use in tests that do not require
+   * metamodel or instance data.
+   *
+   * <p>All instance-related methods return empty results or throw {@link
+   * UnsupportedOperationException} if called unexpectedly.
+   *
+   * @return a dummy {@link MetamodelWrapperInterface} implementation
+   */
   protected MetamodelWrapperInterface buildDummySpec() {
     return new MetamodelWrapperInterface() {
       @Override

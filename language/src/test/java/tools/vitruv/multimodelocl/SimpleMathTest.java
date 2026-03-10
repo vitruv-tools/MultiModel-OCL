@@ -32,49 +32,49 @@ public class SimpleMathTest extends DummyTestSpecification {
 
   // ==================== Arithmetic Operations ====================
 
-  /** Tests addition: {@code 1+2} → {@code [3]} */
+  /** Tests addition: {@code 1+2} → {@code [3]}. */
   @Test
   public void testOnePlusTwo() {
     assertSingleInt(compile("1+2"), 3);
   }
 
-  /** Tests subtraction: {@code 5-3} → {@code [2]} */
+  /** Tests subtraction: {@code 5-3} → {@code [2]}. */
   @Test
   public void testFiveMinusThree() {
     assertSingleInt(compile("5-3"), 2);
   }
 
-  /** Tests multiplication: {@code 4*5} → {@code [20]} */
+  /** Tests multiplication: {@code 4*5} → {@code [20]}. */
   @Test
   public void testMultiplication() {
     assertSingleInt(compile("4*5"), 20);
   }
 
-  /** Tests division: {@code 20/4} → {@code [5]} */
+  /** Tests division: {@code 20/4} → {@code [5]}. */
   @Test
   public void testDivision() {
     assertSingleInt(compile("20/4"), 5);
   }
 
-  /** Tests chained operations: {@code 10+20-5} → {@code [25]} */
+  /** Tests chained operations: {@code 10+20-5} → {@code [25]}. */
   @Test
   public void testChainedOperations() {
     assertSingleInt(compile("10+20-5"), 25);
   }
 
-  /** Tests operator precedence: {@code 2+3*4} → {@code [14]} (multiplication first) */
+  /** Tests operator precedence: {@code 2+3*4} → {@code [14]} (multiplication first). */
   @Test
   public void testOperatorPrecedence() {
     assertSingleInt(compile("2+3*4"), 14);
   }
 
-  /** Tests unary minus: {@code -5} → {@code [-5]} */
+  /** Tests unary minus: {@code -5} → {@code [-5]}. */
   @Test
   public void testUnaryMinus() {
     assertSingleInt(compile("-5"), -5);
   }
 
-  /** Tests unary minus in expression: {@code 10 + -5} → {@code [5]} */
+  /** Tests unary minus in expression: {@code 10 + -5} → {@code [5]}. */
   @Test
   public void testUnaryMinusInExpression() {
     assertSingleInt(compile("10 + -5"), 5);
@@ -82,49 +82,49 @@ public class SimpleMathTest extends DummyTestSpecification {
 
   // ==================== Comparison Operations ====================
 
-  /** Tests less-than (true): {@code 3 < 5} → {@code [true]} */
+  /** Tests less-than (true): {@code 3 < 5} → {@code [true]}. */
   @Test
   public void testLessThan() {
     assertSingleBool(compile("3 < 5"), true);
   }
 
-  /** Tests less-than (false): {@code 5 < 3} → {@code [false]} */
+  /** Tests less-than (false): {@code 5 < 3} → {@code [false]}. */
   @Test
   public void testLessThanFalse() {
     assertSingleBool(compile("5 < 3"), false);
   }
 
-  /** Tests less-than-or-equal (equality case): {@code 3 <= 3} → {@code [true]} */
+  /** Tests less-than-or-equal (equality case): {@code 3 <= 3} → {@code [true]}. */
   @Test
   public void testLessThanOrEqual() {
     assertSingleBool(compile("3 <= 3"), true);
   }
 
-  /** Tests greater-than (true): {@code 10 > 5} → {@code [true]} */
+  /** Tests greater-than (true): {@code 10 > 5} → {@code [true]}. */
   @Test
   public void testGreaterThan() {
     assertSingleBool(compile("10 > 5"), true);
   }
 
-  /** Tests greater-than-or-equal (equality case): {@code 5 >= 5} → {@code [true]} */
+  /** Tests greater-than-or-equal (equality case): {@code 5 >= 5} → {@code [true]}. */
   @Test
   public void testGreaterThanOrEqual() {
     assertSingleBool(compile("5 >= 5"), true);
   }
 
-  /** Tests equality (true): {@code 5 == 5} → {@code [true]} */
+  /** Tests equality (true): {@code 5 == 5} → {@code [true]}. */
   @Test
   public void testEquality() {
     assertSingleBool(compile("5 == 5"), true);
   }
 
-  /** Tests inequality (true): {@code 5 != 3} → {@code [true]} */
+  /** Tests inequality (true): {@code 5 != 3} → {@code [true]}. */
   @Test
   public void testInequality() {
     assertSingleBool(compile("5 != 3"), true);
   }
 
-  /** Tests inequality (false): {@code 5 != 5} → {@code [false]} */
+  /** Tests inequality (false): {@code 5 != 5} → {@code [false]}. */
   @Test
   public void testInequalityFalse() {
     assertSingleBool(compile("5 != 5"), false);
@@ -140,7 +140,7 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleInt(compile("Sequence{1,2,3}.sum()"), 6);
   }
 
-  /** Tests sum() on empty collection → {@code [0]} */
+  /** Tests sum() on empty collection → {@code [0]}. */
   @Test
   public void testSumEmptyCollection() {
     assertSingleInt(compile("Set{}.sum()"), 0);
@@ -154,7 +154,7 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleInt(compile("Set{-5,-10,-1}.max()"), -1);
   }
 
-  /** Tests max() on empty collection → empty */
+  /** Tests max() on empty collection → empty. */
   @Test
   public void testMaxEmptyCollection() {
     assertSize(compile("Set{}.max()"), 0);
@@ -168,7 +168,7 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleInt(compile("Set{-5,-10,-1}.min()"), -10);
   }
 
-  /** Tests min() on empty collection → empty */
+  /** Tests min() on empty collection → empty. */
   @Test
   public void testMinEmptyCollection() {
     assertSize(compile("Set{}.min()"), 0);
@@ -182,7 +182,7 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleInt(compile("Set{100,200}.avg()"), 150);
   }
 
-  /** Tests avg() on empty collection → empty */
+  /** Tests avg() on empty collection → empty. */
   @Test
   public void testAvgEmptyCollection() {
     assertSize(compile("Set{}.avg()"), 0);
@@ -217,7 +217,7 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertCollection(compile("Sequence{10,20,30}.round()"), 10, 20, 30);
   }
 
-  /** Tests lift(): {@code Set{1,2,3}.lift()} → singleton containing collection of size 3 */
+  /** Tests lift(): {@code Set{1,2,3}.lift()} → singleton containing collection of size 3. */
   @Test
   public void testLift() {
     Value result = compile("Set{1,2,3}.lift()");
@@ -230,7 +230,7 @@ public class SimpleMathTest extends DummyTestSpecification {
         "Inner collection should have 3 elements");
   }
 
-  /** Tests lift().flatten() is identity: → {1,2,3} */
+  /** Tests lift().flatten() is identity: → {1,2,3}. */
   @Test
   public void testLiftThenFlatten() {
     assertCollection(compile("Set{1,2,3}.lift().flatten()"), 1, 2, 3);

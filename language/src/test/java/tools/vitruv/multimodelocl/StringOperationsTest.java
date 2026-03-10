@@ -40,7 +40,7 @@ public class StringOperationsTest extends DummyTestSpecification {
 
   // ==================== String Literals ====================
 
-  /** Tests basic string literal: {@code "Hello"} → {@code ["Hello"]} */
+  /** Tests basic string literal: {@code "Hello"} → {@code ["Hello"]}. */
   @Test
   public void testStringLiteral() {
     assertSingleString(compile("\"Hello\""), "Hello");
@@ -59,7 +59,7 @@ public class StringOperationsTest extends DummyTestSpecification {
 
   // ==================== SUBSTRING ====================
 
-  /** Tests substring extraction: {@code "Hello".substring(1, 3)} → {@code ["Hel"]} */
+  /** Tests substring extraction: {@code "Hello".substring(1, 3)} → {@code ["Hel"]}. */
   @Test
   public void testSubstring() {
     assertSingleString(compile("\"Hello\".substring(1, 3)"), "Hel");
