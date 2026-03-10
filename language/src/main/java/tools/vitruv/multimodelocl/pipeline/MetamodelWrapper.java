@@ -41,13 +41,13 @@ import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;
  */
 public class MetamodelWrapper implements MetamodelWrapperInterface {
 
-  /** Default directory for test model files (legacy support) */
+  /** Default directory for test model files (legacy support). */
   public static Path TEST_MODELS_PATH = Path.of("test-models");
 
   /** Maps package names to loaded EPackages */
   private final Map<String, EPackage> metamodelRegistry = new HashMap<>();
 
-  /** Maps EClasses to all instances (including subtype instances) */
+  /** Maps EClasses to all instances (including subtype instances). */
   private final Map<EClass, List<EObject>> instances = new HashMap<>();
 
   /**
@@ -59,10 +59,10 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   /** Ordered list of context-level (root) EObjects for index-based lookup from evaluator. */
   private final List<EObject> contextObjects = new ArrayList<>();
 
-  /** Maps instance index to source filename for error reporting (index matches contextObjects) */
+  /** Maps instance index to source filename for error reporting (index matches contextObjects). */
   private final List<String> instanceFilenames = new ArrayList<>();
 
-  /** EMF resource set for loading metamodels */
+  /** EMF resource set for loading metamodels. */
   private final ResourceSet resourceSet;
 
   /** Creates metamodel wrapper with EMF resource factories configured. */
@@ -186,7 +186,7 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
     }
   }
 
-  /** Legacy method for backward compatibility */
+  /** Legacy method for backward compatibility. */
   private void addInstanceRecursive(EObject instance) {
     addInstanceRecursive(instance, "unknown");
   }

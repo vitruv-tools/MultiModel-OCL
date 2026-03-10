@@ -572,8 +572,8 @@ async function findEcoreFiles(constraintFileUri?: vscode.Uri): Promise<string[]>
         while (searchDir && searchDir !== workspaceRoot) {
             const metamodelsPath = path.join(searchDir, 'metamodels');
             if (fs.existsSync(metamodelsPath)) {
-                // Ordner gefunden → direkt alle .ecore-Dateien darin zurückgeben,
-                // kein weiteres Hochlaufen, kein globaler Fallback
+                // folder found -> return all files
+                // no global fallback
                 const entries = fs.readdirSync(metamodelsPath)
                     .filter(f => f.endsWith('.ecore'))
                     .map(f => path.join(metamodelsPath, f))
@@ -585,8 +585,8 @@ async function findEcoreFiles(constraintFileUri?: vscode.Uri): Promise<string[]>
             searchDir = parentDir;
         }
 
-        // Kein metamodels-Ordner in der Hierarchie gefunden →
-        // Suche nur relativ zum Ordner der .ocl-Datei (nicht im gesamten Workspace)
+        // no instances found in hirarchy
+        // search just relative to the folder where the .ocl files are located (not the whole workspace)
         const files = await vscode.workspace.findFiles(
             new vscode.RelativePattern(constraintDir, '**/metamodels/*.ecore')
         );
@@ -605,8 +605,8 @@ async function findInstanceFiles(constraintFileUri?: vscode.Uri): Promise<string
         while (searchDir && searchDir !== workspaceRoot) {
             const instancesPath = path.join(searchDir, 'instances');
             if (fs.existsSync(instancesPath)) {
-                // Ordner gefunden → direkt alle Dateien darin zurückgeben,
-                // kein weiteres Hochlaufen, kein globaler Fallback
+                // folder found -> return all files
+                // no global fallback
                 const entries = fs.readdirSync(instancesPath)
                     .filter(f => !f.startsWith('.'))
                     .map(f => path.join(instancesPath, f))
@@ -618,8 +618,8 @@ async function findInstanceFiles(constraintFileUri?: vscode.Uri): Promise<string
             searchDir = parentDir;
         }
 
-        // Kein instances-Ordner in der Hierarchie gefunden →
-        // Suche nur relativ zum Ordner der .ocl-Datei (nicht im gesamten Workspace)
+        // no instances found in hirarchy
+        // search just relative to the folder where the .ocl files are located (not the whole workspace)
         const files = await vscode.workspace.findFiles(
             new vscode.RelativePattern(constraintDir, '**/instances/*.*')
         );
