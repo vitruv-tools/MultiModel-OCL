@@ -2269,6 +2269,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     if (EObject.class.isAssignableFrom(clazz)) {
       return new OCLElement.MetaclassValue((EObject) value);
     }
+    if (clazz.equals(Float.class)) {
+      return new OCLElement.DoubleValue(((Float) value).doubleValue());
+    }
+    if (clazz.equals(Double.class)) {
+      return new OCLElement.DoubleValue((Double) value);
+    }
 
     throw new RuntimeException("Cannot wrap: " + value.getClass());
   }
@@ -2352,9 +2358,55 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   @Override
   public Value visitOclAsTypeOp(OCLParser.OclAsTypeOpContext ctx) {
     Value receiver = receiverStack.peek();
-    Type resultType = nodeTypes.get(ctx);
-    return Value.of(
-        receiver.getElements(), resultType != null ? resultType : receiver.getRuntimeType());
+    Type targetType = nodeTypes.get(ctx);
+
+    if (targetType == null) {
+      return error("Cannot resolve target type in oclAsType", ctx);
+    }
+
+    // Unwrap collection to get the actual element type
+    Type targetElemType = targetType.isCollection() ? targetType.getElementType() : targetType;
+
+    // Primitive Type cast: just re-annotate with target type
+    if (!targetElemType.isMetaclassType()) {
+      Type resultType = preserveCollectionKind(receiver.getRuntimeType(), targetElemType);
+      return Value.of(receiver.getElements(), resultType);
+    }
+
+    // Metaclass cast: validate each element via EMF inheritance
+    EClass targetEClass = targetElemType.getEClass();
+    List<OCLElement> results = new ArrayList<>();
+
+    for (OCLElement elem : receiver.getElements()) {
+      if (elem instanceof OCLElement.MetaclassValue mv) {
+        EClass elemEClass = mv.instance().eClass();
+        if (targetEClass.isSuperTypeOf(elemEClass) || elemEClass.equals(targetEClass)) {
+          results.add(new OCLElement.CastedMetaclassValue(mv.instance(), targetEClass));
+        } else {
+          return error(
+              "oclAsType: cannot cast " + elemEClass.getName() + " to " + targetEClass.getName(),
+              ctx);
+        }
+      } else {
+        return error("oclAsType: element is not a metaclass instance", ctx);
+      }
+    }
+
+    Type resultType = preserveCollectionKind(receiver.getRuntimeType(), targetElemType);
+    return Value.of(results, resultType);
+  }
+
+  /** Preserves collection kind of receiver while changing element type. */
+  private Type preserveCollectionKind(Type collectionType, Type newElementType) {
+    if (collectionType.isUnique() && collectionType.isOrdered()) {
+      return Type.orderedSet(newElementType);
+    } else if (collectionType.isUnique()) {
+      return Type.set(newElementType);
+    } else if (collectionType.isOrdered()) {
+      return Type.sequence(newElementType);
+    } else {
+      return Type.bag(newElementType);
+    }
   }
 
   /**

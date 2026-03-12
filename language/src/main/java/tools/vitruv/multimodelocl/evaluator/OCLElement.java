@@ -27,7 +27,8 @@ public sealed interface OCLElement
         OCLElement.ObjectRef,
         OCLElement.DoubleValue,
         OCLElement.NestedCollection,
-        OCLElement.MetaclassValue {
+        OCLElement.MetaclassValue,
+        OCLElement.CastedMetaclassValue {
 
   /** Returns the EClass for metamodel elements, null for primitives. */
   default EClass getEClass() {
@@ -263,5 +264,34 @@ public sealed interface OCLElement
     if (elem instanceof MetaclassValue) return 4;
     if (elem instanceof NestedCollection) return 5;
     return 6;
+  }
+
+  /**
+   * A metaclass value that has been cast to a specific target type via oclAsType. getEClass()
+   * returns the cast target type, not the runtime type of the instance. This allows property access
+   * on the target type's features after casting.
+   */
+  record CastedMetaclassValue(EObject instance, EClass castedTo) implements OCLElement {
+    @Override
+    public EClass getEClass() {
+      // Return the cast target type, not instance.eClass()
+      // This ensures property access uses the superclass features
+      return castedTo;
+    }
+
+    @Override
+    public String toString() {
+      return "("
+          + castedTo.getName()
+          + ") "
+          + instance.eClass().getName()
+          + "@"
+          + System.identityHashCode(instance);
+    }
+
+    @Override
+    public EObject tryGetInstance() {
+      return instance;
+    }
   }
 }

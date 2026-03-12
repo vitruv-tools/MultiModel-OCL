@@ -828,6 +828,14 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
     if (t1 == Type.ERROR || t2 == Type.ERROR) return true;
     if (t1.equals(t2)) return true;
     if (t1.isConformantTo(t2) || t2.isConformantTo(t1)) return true;
+
+    // Unwrap collections and compare element types
+    Type e1 = t1.isCollection() ? t1.getElementType() : t1;
+    Type e2 = t2.isCollection() ? t2.getElementType() : t2;
+    if (!e1.equals(t1) || !e2.equals(t2)) {
+      return areComparable(e1, e2);
+    }
+
     return false;
   }
 
@@ -1390,6 +1398,10 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
         return Type.INTEGER;
       case "EBoolean":
         return Type.BOOLEAN;
+      case "EFloat":
+        return Type.FLOAT;
+      case "EDouble":
+        return Type.DOUBLE;
       default:
         if (EcorePackage.Literals.ECLASS.equals(classifier.eClass())) {
           return Type.metaclassType((EClass) classifier);
@@ -3311,19 +3323,18 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
     Type receiverType = receiverStack.peek();
 
     if (!receiverType.isCollection()) {
-      errors.add(
-          ctx.getStart().getLine(),
-          ctx.getStart().getCharPositionInLine(),
-          "'oclAsType' requires collection",
-          ErrorSeverity.ERROR,
-          "type-checker");
-      return Type.ERROR;
+      receiverType = Type.set(receiverType);
     }
 
     Type targetType = visit(ctx.type);
+    System.err.println("oclAsType targetType: " + targetType + " text: " + ctx.type.getText());
+    if (targetType == null && ctx.type != null) {
+      targetType = resolveTypeExpression(ctx.type);
+    }
 
     Type resultType = preserveCollectionKind(receiverType, targetType);
     nodeTypes.put(ctx, resultType);
+    nodeTypes.put(ctx.type, targetType);
     return resultType;
   }
 

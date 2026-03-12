@@ -64,6 +64,9 @@ public abstract class Type {
   /** Primitive String type with implicit SINGLETON multiplicity. */
   public static final Type STRING = new StringType();
 
+  /** Primitive Float type with implicit SINGLETON multiplicity. */
+  public static final Type FLOAT = new FloatType();
+
   /** Top type in the type hierarchy - all types conform to ANY. */
   public static final Type ANY = new AnyType();
 
@@ -340,6 +343,7 @@ public abstract class Type {
     @Override
     public boolean isConformantTo(Type other) {
       if (other == INTEGER) return true;
+      if (other == FLOAT) return true;
       if (other == DOUBLE) return true;
       if (other == ERROR) return true;
       if (other == ANY) return true;
@@ -405,6 +409,7 @@ public abstract class Type {
       if (other == INTEGER) return true;
       if (other == ERROR) return true;
       if (other == ANY) return true;
+      if (other == FLOAT) return true;
 
       // Singleton !double! conforms to base double
       if (other.isSingleton() && other.getElementType() == DOUBLE) {
@@ -421,6 +426,34 @@ public abstract class Type {
     @Override
     public String getTypeName() {
       return "Double";
+    }
+  }
+
+  /**
+   * Float type implementation with implicit SINGLETON multiplicity.
+   *
+   * <p>Represents EFloat attributes from EMF metamodels (e.g., Coordinate.x). Conforms to Double
+   * and Integer for arithmetic compatibility.
+   */
+  private static class FloatType extends Type {
+    @Override
+    public boolean isConformantTo(Type other) {
+      if (other == FLOAT) return true;
+      if (other == DOUBLE) return true; // Float conforms to Double
+      if (other == INTEGER) return true;
+      if (other == ERROR) return true;
+      if (other == ANY) return true;
+
+      if (other.isSingleton() && other.getElementType() == FLOAT) return true;
+      if (other.getElementType() == FLOAT) return true;
+      if (other.getElementType() == DOUBLE) return true;
+
+      return false;
+    }
+
+    @Override
+    public String getTypeName() {
+      return "Float";
     }
   }
 
@@ -669,8 +702,10 @@ public abstract class Type {
     if (t1.equals(t2)) return t1;
     if (t1 == ERROR || t2 == ERROR) return ERROR;
 
-    boolean t1Primitive = (t1 == INTEGER || t1 == STRING || t1 == BOOLEAN);
-    boolean t2Primitive = (t2 == INTEGER || t2 == STRING || t2 == BOOLEAN);
+    boolean t1Primitive =
+        (t1 == INTEGER || t1 == STRING || t1 == BOOLEAN || t1 == DOUBLE || t1 == FLOAT);
+    boolean t2Primitive =
+        (t2 == INTEGER || t2 == STRING || t2 == BOOLEAN || t2 == DOUBLE || t2 == FLOAT);
 
     if (t1Primitive && t2Primitive && !t1.equals(t2)) {
       return ANY;
