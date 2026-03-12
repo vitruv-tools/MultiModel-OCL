@@ -371,6 +371,28 @@ context satelliteSystem::Satellite inv typeOfSatellite:
     assertTrue(result.isSatisfied(), "Should find Spacecraft instances via oclIsTypeOf");
   }
 
+  /**
+   * Tests oclIsTypeOf as select predicate returning Boolean body. select(p |
+   * p.oclIsTypeOf(Integer)) should filter correctly.
+   */
+  @Test
+  public void testOclIsTypeOfAsSelectPredicate() {
+    Value result = compile("Sequence{1, \"hello\", true}.select(p | p.oclIsTypeOf(Integer))");
+    assertSize(result, 1);
+    assertTrue(((OCLElement.IntValue) result.getElements().get(0)).value() == 1);
+  }
+
+  /**
+   * Tests oclIsTypeOf as select predicate followed by size(). Mirrors the brakedisk pattern:
+   * collection.select(p | p.oclIsTypeOf(T)).size() > 0
+   */
+  @Test
+  public void testOclIsTypeOfSelectThenSize() {
+    Value result =
+        compile("Sequence{1, \"hello\", true, 2}.select(p | p.oclIsTypeOf(Integer)).size()");
+    assertSingleInt(result, 2);
+  }
+
   // ==================== Entry Point Override ====================
 
   /** Overrides parse entry point to use {@code infixedExpCS()} for oclIsTypeOf expressions. */
