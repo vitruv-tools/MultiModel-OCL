@@ -2323,12 +2323,18 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     Type targetType = nodeTypes.get(ctx.type);
 
     if (targetType == null) {
-      return error("Cannot resolve type in oclIsTypeOf", ctx);
+      return error(
+          "Cannot resolve type in oclIsTypeOf "
+              + "targetType "
+              + targetType
+              + " ctx.type.getText(): "
+              + ctx.type.getText(),
+          ctx);
     }
 
     List<OCLElement> results = new ArrayList<>();
     for (OCLElement elem : receiver.getElements()) {
-      results.add(new OCLElement.BoolValue(checkIsKindOf(elem, targetType)));
+      results.add(new OCLElement.BoolValue(checkIsTypeOf(elem, targetType)));
     }
 
     Type resultType = nodeTypes.get(ctx);
@@ -2381,6 +2387,39 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
       }
 
       return targetEClass.isSuperTypeOf(elemEClass) || elemEClass.equals(targetEClass);
+    }
+
+    return false;
+  }
+
+  /**
+   * Helper method to check if an element is of a given type.
+   *
+   * <p>Implements type checking for both primitive types (Integer, String, Boolean, Double) and
+   * metaclass types (using EMF inheritance).
+   *
+   * @param elem The element to check
+   * @param targetType The target type
+   * @return true if the element is of the exact target type
+   */
+  private boolean checkIsTypeOf(OCLElement elem, Type targetType) {
+    if (targetType == Type.INTEGER) {
+      return elem.tryGetInt() != null;
+    } else if (targetType == Type.STRING) {
+      return elem.tryGetString() != null;
+    } else if (targetType == Type.BOOLEAN) {
+      return elem.tryGetBool() != null;
+    } else if (targetType == Type.DOUBLE) {
+      return elem.tryGetDouble() != null;
+    }
+
+    if (targetType.isMetaclassType()) {
+      EClass targetEClass = targetType.getEClass();
+      EClass elemEClass = elem.getEClass();
+      if (elemEClass == null) {
+        return false;
+      }
+      return elemEClass.equals(targetEClass);
     }
 
     return false;
