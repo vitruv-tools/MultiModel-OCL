@@ -2629,7 +2629,9 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
 
       Type bodyType = visit(ctx.body);
 
-      if (!bodyType.isConformantTo(Type.BOOLEAN)) {
+      Type checkType = bodyType.isCollection() ? bodyType.getElementType() : bodyType;
+
+      if (!checkType.isConformantTo(Type.BOOLEAN)) {
         errors.add(
             ctx.getStart().getLine(),
             ctx.getStart().getCharPositionInLine(),
@@ -3229,13 +3231,7 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
     }
 
     if (!receiverType.isCollection()) {
-      errors.add(
-          ctx.getStart().getLine(),
-          ctx.getStart().getCharPositionInLine(),
-          "oclIsKindOf() requires collection receiver",
-          ErrorSeverity.ERROR,
-          "type-checker");
-      return Type.ERROR;
+      receiverType = Type.set(receiverType);
     }
 
     // Preserve collection kind from receiver
@@ -3276,18 +3272,19 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
   public Type visitOclIsTypeOfOp(OCLParser.OclIsTypeOfOpContext ctx) {
     Type receiverType = receiverStack.peek();
 
+    Type targetType = visit(ctx.type);
+    if (targetType == null && ctx.type != null) {
+      targetType = resolveTypeExpression(ctx.type);
+    }
+
+    // Wrap singleton/metaclass in collection for oclIsTypeOf
     if (!receiverType.isCollection()) {
-      errors.add(
-          ctx.getStart().getLine(),
-          ctx.getStart().getCharPositionInLine(),
-          "'oclIsTypeOf' requires collection",
-          ErrorSeverity.ERROR,
-          "type-checker");
-      return Type.ERROR;
+      receiverType = Type.set(receiverType);
     }
 
     Type resultType = preserveCollectionKind(receiverType, Type.BOOLEAN);
     nodeTypes.put(ctx, resultType);
+    nodeTypes.put(ctx.type, targetType);
     return resultType;
   }
 

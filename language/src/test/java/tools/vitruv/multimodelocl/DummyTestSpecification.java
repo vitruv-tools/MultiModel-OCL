@@ -12,6 +12,7 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.eclipse.emf.ecore.EClass;
 import org.eclipse.emf.ecore.EObject;
+import tools.vitruv.multimodelocl.common.CompileError;
 import tools.vitruv.multimodelocl.common.ErrorCollector;
 import tools.vitruv.multimodelocl.evaluator.EvaluationVisitor;
 import tools.vitruv.multimodelocl.evaluator.OCLElement;
@@ -117,6 +118,9 @@ public abstract class DummyTestSpecification {
     Value result = evaluator.visit(tree);
 
     if (evaluator.hasErrors()) {
+      for (CompileError s : evaluator.getErrorCollector().getErrors()) {
+        System.err.println("Evaluation error: " + s.getColumn() + ": " + s.getMessage());
+      }
       fail("Pass 3 (Evaluation) failed: " + evaluator.getErrorCollector().getErrors());
     }
 
