@@ -175,7 +175,7 @@ public class MultiModelOCLCLI {
     return constraints;
   }
 
-  private static String extractConstraintName(String constraint) {
+  public static String extractConstraintName(String constraint) {
     // Extract name from "context ... inv NAME:"
     String[] lines = constraint.split("\n");
     for (String line : lines) {

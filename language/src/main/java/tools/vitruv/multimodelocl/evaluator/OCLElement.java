@@ -25,6 +25,7 @@ public sealed interface OCLElement
         OCLElement.BoolValue,
         OCLElement.StringValue,
         OCLElement.ObjectRef,
+        OCLElement.FloatValue,
         OCLElement.DoubleValue,
         OCLElement.NestedCollection,
         OCLElement.MetaclassValue,
@@ -60,6 +61,14 @@ public sealed interface OCLElement
   }
 
   /**
+   * Try to get float value, returns null if not a FloatValue. Represents EFloat attributes from EMF
+   * metamodels. Avoids instanceof checks in calling code.
+   */
+  default Float tryGetFloat() {
+    return null;
+  }
+
+  /**
    * Try to get double value, returns null if not a DoubleValue. Avoids instanceof checks in calling
    * code.
    */
@@ -88,7 +97,23 @@ public sealed interface OCLElement
     }
   }
 
-  /** Double value element. */
+  /**
+   * Float value element. Represents EFloat attributes from EMF metamodels (e.g., Coordinate.x).
+   * Kept separate from DoubleValue to preserve the distinction between EFloat and EDouble in EMF.
+   */
+  record FloatValue(float value) implements OCLElement {
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @Override
+    public Float tryGetFloat() {
+      return value;
+    }
+  }
+
+  /** Double value element. Represents EDouble attributes and OCL Real literals. */
   record DoubleValue(double value) implements OCLElement {
     @Override
     public String toString() {
@@ -181,19 +206,15 @@ public sealed interface OCLElement
     if (a == null && b == null) return true;
     if (a == null || b == null) return false;
 
-    // Handle different types
+    // Exact type matches
     if (a instanceof IntValue ia && b instanceof IntValue ib) {
       return ia.value == ib.value;
     }
+    if (a instanceof FloatValue fa && b instanceof FloatValue fb) {
+      return Float.compare(fa.value, fb.value) == 0;
+    }
     if (a instanceof DoubleValue da && b instanceof DoubleValue db) {
-      return da.value == db.value;
-    }
-    // Type coercion: Int == Double
-    if (a instanceof IntValue ia && b instanceof DoubleValue db) {
-      return ia.value == db.value;
-    }
-    if (a instanceof DoubleValue da && b instanceof IntValue ib) {
-      return da.value == ib.value;
+      return Double.compare(da.value, db.value) == 0;
     }
     if (a instanceof BoolValue ba && b instanceof BoolValue bb) {
       return ba.value == bb.value;
@@ -210,31 +231,59 @@ public sealed interface OCLElement
     if (a instanceof MetaclassValue ma && b instanceof MetaclassValue mb) {
       return ma.instance.equals(mb.instance);
     }
+
+    // Numeric type coercion: Float/Double/Int cross-comparisons
+    double aNum = toDouble(a);
+    double bNum = toDouble(b);
+    if (!Double.isNaN(aNum) && !Double.isNaN(bNum)) {
+      return Double.compare(aNum, bNum) == 0;
+    }
+
     return false;
   }
 
   /**
-   * Compares two OCL elements for ordering. Used for normalizing unordered collections (Sets,
-   * Bags).
+   * Converts a numeric OCLElement to double for cross-type arithmetic. Returns NaN if the element
+   * is not a numeric type.
+   */
+  private static double toDouble(OCLElement elem) {
+    if (elem instanceof IntValue iv) return iv.value;
+    if (elem instanceof FloatValue fv) return fv.value;
+    if (elem instanceof DoubleValue dv) return dv.value;
+    return Double.NaN;
+  }
+
+  /**
+   * Compares two OCL elements for ordering. Used for normalizing unordered collections (Sets, Bags)
+   * and comparison operators (<, >, <=, >=).
    *
-   * <p>Order: Integers &lt; Booleans &lt; Strings &lt; ObjectRefs &lt; NestedCollections
+   * <p>Numeric types (Int, Float, Double) are compared by value regardless of their concrete type,
+   * so that e.g. FloatValue(165.0) < IntValue(500) works correctly.
+   *
+   * <p>Type order for heterogeneous non-numeric collections: Integers/Floats/Doubles &lt; Booleans
+   * &lt; Strings &lt; ObjectRefs &lt; MetaclassValues &lt; NestedCollections
    */
   static int compare(OCLElement a, OCLElement b) {
     if (a == b) return 0;
     if (a == null) return -1;
     if (b == null) return 1;
 
-    // First compare by type order
+    // Numeric comparison: handle Int/Float/Double mixing BEFORE type order check
+    // so that e.g. 165.0f < 500 works correctly regardless of concrete numeric type
+    double aNum = toDouble(a);
+    double bNum = toDouble(b);
+    if (!Double.isNaN(aNum) && !Double.isNaN(bNum)) {
+      return Double.compare(aNum, bNum);
+    }
+
+    // Non-numeric: compare by type order first (for heterogeneous collection sorting)
     int typeA = getTypeOrder(a);
     int typeB = getTypeOrder(b);
     if (typeA != typeB) {
       return Integer.compare(typeA, typeB);
     }
 
-    // Same type - compare values
-    if (a instanceof IntValue ia && b instanceof IntValue ib) {
-      return Integer.compare(ia.value, ib.value);
-    }
+    // Same non-numeric type: compare values
     if (a instanceof BoolValue ba && b instanceof BoolValue bb) {
       return Boolean.compare(ba.value, bb.value);
     }
@@ -255,9 +304,14 @@ public sealed interface OCLElement
     return 0;
   }
 
-  /** Returns a numeric order for element types. Used for sorting heterogeneous collections. */
+  /**
+   * Returns a numeric order for element types. Used for sorting heterogeneous collections. Numeric
+   * types (Int, Float, Double) share the lowest order so they sort together.
+   */
   static int getTypeOrder(OCLElement elem) {
     if (elem instanceof IntValue) return 0;
+    if (elem instanceof FloatValue) return 0; // numeric — same tier as Int
+    if (elem instanceof DoubleValue) return 0; // numeric — same tier as Int
     if (elem instanceof BoolValue) return 1;
     if (elem instanceof StringValue) return 2;
     if (elem instanceof ObjectRef) return 3;
