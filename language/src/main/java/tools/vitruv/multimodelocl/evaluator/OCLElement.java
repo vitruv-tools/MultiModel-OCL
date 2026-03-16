@@ -255,10 +255,10 @@ public sealed interface OCLElement
 
   /**
    * Compares two OCL elements for ordering. Used for normalizing unordered collections (Sets, Bags)
-   * and comparison operators (<, >, <=, >=).
+   * and comparison operators ({@code <}, {@code >}, {@code <=}, {@code >=}).
    *
    * <p>Numeric types (Int, Float, Double) are compared by value regardless of their concrete type,
-   * so that e.g. FloatValue(165.0) < IntValue(500) works correctly.
+   * so that e.g. {@code FloatValue(165.0) < IntValue(500)} works correctly.
    *
    * <p>Type order for heterogeneous non-numeric collections: Integers/Floats/Doubles &lt; Booleans
    * &lt; Strings &lt; ObjectRefs &lt; MetaclassValues &lt; NestedCollections
