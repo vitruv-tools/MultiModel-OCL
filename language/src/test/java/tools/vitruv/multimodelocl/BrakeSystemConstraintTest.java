@@ -41,12 +41,47 @@ public class BrakeSystemConstraintTest {
     MetamodelWrapper.TEST_MODELS_PATH = Path.of("src/test/resources/test-models");
   }
 
-  /**
-   * Tests that Coordinate parameters in the caliper namespace can be filtered and cast. Verifies
-   * oclIsTypeOf + oclAsType pipeline with real inheritance (Coordinate extends Parameter). The
-   * caliper has Coordinates with x=165 and x=175, disk diameter=330 (radius=165). x=175 > 165 →
-   * constraint should NOT be satisfied.
-   */
+  @Test
+  public void testArnesConstraintIsNotVacuouslyTrue() throws Exception {
+    String constraint =
+        "context brakesystem::BrakeDisk inv:\n"
+            + "  let cadDisk=cad::Namespace.allInstances().select(b|b.id == self.id) in\n"
+            + "  let brakeCaliper=brakesystem::BrakeCaliper.allInstances().first() in\n"
+            + "  let cadCaliper=cad::Namespace.allInstances().select(b|b.id == brakeCaliper.id)"
+            + " in\n"
+            + "  cadCaliper.parameters.select(p|p.oclIsTypeOf(cad::Coordinate)).forAll(p|p.oclAsType(cad::Coordinate).x"
+            + " >= 500)";
+
+    ConstraintResult result =
+        MultiModelOCLInterface.evaluateConstraint(
+            constraint,
+            new Path[] {BRAKESYSTEM_ECORE, CAD_ECORE},
+            new Path[] {BRAKESYSTEM_INSTANCE, CAD_INSTANCE});
+
+    assertTrue(result.isSuccess(), "Evaluation should succeed: " + result.toDetailedErrorString());
+    assertFalse(
+        result.isSatisfied(), "Bug reproduced: forAll vacuously true. cadCaliper was empty.");
+  }
+
+  @Test
+  public void testFirstReturnsUsableIdForNamespaceLookup() throws Exception {
+    String constraint =
+        "context brakesystem::BrakeDisk inv:\n"
+            + "  let brakeCaliper=brakesystem::BrakeCaliper.allInstances().first() in\n"
+            + "  let cadCaliper=cad::Namespace.allInstances().select(b|b.id == brakeCaliper.id)"
+            + " in\n"
+            + "  cadCaliper.size() == 1";
+
+    ConstraintResult result =
+        MultiModelOCLInterface.evaluateConstraint(
+            constraint,
+            new Path[] {BRAKESYSTEM_ECORE, CAD_ECORE},
+            new Path[] {BRAKESYSTEM_INSTANCE, CAD_INSTANCE});
+
+    assertTrue(result.isSuccess(), "Evaluation should succeed: " + result.toDetailedErrorString());
+    assertTrue(result.isSatisfied(), "Exactly 1 Namespace with the caliper id should be found.");
+  }
+
   @Test
   public void testCaliperCoordinatesWithinDiskRadius() throws Exception {
     String constraint =
@@ -63,16 +98,11 @@ context brakesystem::BrakeDisk inv coordinatesWithinRadius:
             new Path[] {BRAKESYSTEM_INSTANCE, CAD_INSTANCE});
 
     assertTrue(result.isSuccess(), "Evaluation should succeed: " + result.toDetailedErrorString());
-    // x=175 > 165 (radius) → not satisfied
     assertFalse(
         result.isSatisfied(),
         "Constraint should fail: caliper coordinate x=175 exceeds disk radius 165");
   }
 
-  /**
-   * Tests that oclIsTypeOf correctly filters only Coordinate instances from mixed Parameter list.
-   * The caliper namespace has 4 Coordinates and 1 NumericParameter.
-   */
   @Test
   public void testFilterCoordinatesFromMixedParameters() throws Exception {
     String constraint =
@@ -93,10 +123,6 @@ context brakesystem::BrakeDisk inv onlyCoordinates:
         result.isSatisfied(), "Should find exactly 4 Coordinate parameters in caliper namespace");
   }
 
-  /**
-   * Tests that oclIsKindOf includes both Coordinate and NumericParameter (both extend Parameter).
-   * The caliper namespace has 5 parameters total (4 Coordinates + 1 NumericParameter).
-   */
   @Test
   public void testFilterAllParameterSubtypes() throws Exception {
     String constraint =
@@ -155,7 +181,6 @@ context brakesystem::BrakeDisk inv allSubtypes:
             new Path[] {BRAKESYSTEM_INSTANCE, CAD_INSTANCE});
 
     assertTrue(result.isSuccess(), "Evaluation should succeed: " + result.toDetailedErrorString());
-    // x=175 > 165 (radius) → not satisfied
     assertFalse(
         result.isSatisfied(),
         "Constraint should fail: caliper coordinate x=175 exceeds disk radius 165");
