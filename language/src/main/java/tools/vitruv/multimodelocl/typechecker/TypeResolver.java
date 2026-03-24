@@ -78,9 +78,15 @@ public class TypeResolver {
    * @return the wider type; Type.ERROR if either argument is not numeric
    */
   public static Type widenNumeric(Type a, Type b) {
-    if (!isNumeric(a) || !isNumeric(b)) return Type.ERROR;
-    if (a == Type.DOUBLE || b == Type.DOUBLE) return Type.DOUBLE;
-    if (a == Type.FLOAT || b == Type.FLOAT) return Type.FLOAT;
+    if (!isNumeric(a) || !isNumeric(b)) {
+      return Type.ERROR;
+    }
+    if (a == Type.DOUBLE || b == Type.DOUBLE) {
+      return Type.DOUBLE;
+    }
+    if (a == Type.FLOAT || b == Type.FLOAT) {
+      return Type.FLOAT;
+    }
     return Type.INTEGER;
   }
 
@@ -162,24 +168,42 @@ public class TypeResolver {
 
     // Logical
     if (operator.equals("and") || operator.equals("or") || operator.equals("xor")) {
-      if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN) return Type.BOOLEAN;
+      if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN) {
+        return Type.BOOLEAN;
+      }
       return Type.ERROR;
     }
     if (operator.equals("implies")) {
-      if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN) return Type.BOOLEAN;
+      if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN) {
+        return Type.BOOLEAN;
+      }
       return Type.ERROR;
     }
 
     // Equality (scalars)
     if (operator.equals("==") || operator.equals("!=")) {
-      if (isNumeric(leftType) && isNumeric(rightType)) return Type.BOOLEAN;
-      if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN) return Type.BOOLEAN;
-      if (leftType == Type.STRING && rightType == Type.STRING) return Type.BOOLEAN;
-      if (leftType == Type.STRING || rightType == Type.STRING) return Type.BOOLEAN;
-      if (leftType.isMetaclassType() && rightType.isMetaclassType()) return Type.BOOLEAN;
+      if (isNumeric(leftType) && isNumeric(rightType)) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.STRING && rightType == Type.STRING) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.STRING || rightType == Type.STRING) {
+        return Type.BOOLEAN;
+      }
+      if (leftType.isMetaclassType() && rightType.isMetaclassType()) {
+        return Type.BOOLEAN;
+      }
       // null-comparison: ?T? compared to anything
-      if (leftType.isOptional() || rightType.isOptional()) return Type.BOOLEAN;
-      if (leftType == Type.ANY || rightType == Type.ANY) return Type.BOOLEAN;
+      if (leftType.isOptional() || rightType.isOptional()) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.ANY || rightType == Type.ANY) {
+        return Type.BOOLEAN;
+      }
       return Type.ERROR;
     }
 
@@ -188,8 +212,12 @@ public class TypeResolver {
         || operator.equals(">")
         || operator.equals(">=")
         || operator.equals("<=")) {
-      if (isNumeric(leftType) && isNumeric(rightType)) return Type.BOOLEAN;
-      if (leftType == Type.STRING && rightType == Type.STRING) return Type.BOOLEAN;
+      if (isNumeric(leftType) && isNumeric(rightType)) {
+        return Type.BOOLEAN;
+      }
+      if (leftType == Type.STRING && rightType == Type.STRING) {
+        return Type.BOOLEAN;
+      }
       return Type.ERROR;
     }
 
@@ -207,8 +235,12 @@ public class TypeResolver {
    * @return the scalar element type, or t unchanged if it is a multi-valued collection
    */
   public static Type unwrapToScalar(Type t) {
-    if (t.isSingleton()) return t.getElementType(); // !T! → T
-    if (t.isOptional()) return t.getElementType(); // ?T? → T (for null comparisons)
+    if (t.isSingleton()) {
+      return t.getElementType(); // !T! → T
+    }
+    if (t.isOptional()) {
+      return t.getElementType(); // ?T? → T (for null comparisons)
+    }
     return t; // bare primitive/metaclass or multi-valued collection — return as-is
   }
 
@@ -292,9 +324,15 @@ public class TypeResolver {
 
       // Sum → preserves numeric element type (Integer, Float, or Double)
       case "sum":
-        if (elementType == Type.INTEGER) return Type.INTEGER;
-        if (elementType == Type.FLOAT) return Type.FLOAT;
-        if (elementType == Type.DOUBLE) return Type.DOUBLE;
+        if (elementType == Type.INTEGER) {
+          return Type.INTEGER;
+        }
+        if (elementType == Type.FLOAT) {
+          return Type.FLOAT;
+        }
+        if (elementType == Type.DOUBLE) {
+          return Type.DOUBLE;
+        }
         return Type.ERROR;
 
       // Type conversion operations
@@ -373,7 +411,9 @@ public class TypeResolver {
         case "toUpper", "toLower", "trim", "substring" -> Type.STRING;
         case "startsWith", "endsWith", "contains", "equalsIgnoreCase" -> Type.BOOLEAN;
         case "concat" -> {
-          if (argumentTypes.length > 0 && argumentTypes[0] == Type.STRING) yield Type.STRING;
+          if (argumentTypes.length > 0 && argumentTypes[0] == Type.STRING) {
+            yield Type.STRING;
+          }
           yield Type.ERROR;
         }
         default -> Type.ERROR;

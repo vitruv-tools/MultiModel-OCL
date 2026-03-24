@@ -88,7 +88,9 @@ public class OCLCompiler {
     OCLParser parser = new OCLParser(tokens);
     OCLParser.ContextDeclCSContext tree = parser.contextDeclCS();
 
-    if (parser.getNumberOfSyntaxErrors() > 0) return null;
+    if (parser.getNumberOfSyntaxErrors() > 0) {
+      return null;
+    }
 
     // Initialize 3-pass architecture
     SymbolTableImpl symbolTable = new SymbolTableImpl(wrapper);
@@ -99,14 +101,18 @@ public class OCLCompiler {
         new SymbolTableBuilder(symbolTable, wrapper, errors, scopeAnnotator);
     symbolTableBuilder.visit(tree);
 
-    if (errors.hasErrors()) return null;
+    if (errors.hasErrors()) {
+      return null;
+    }
 
     // PASS 2: Type Checking
     TypeCheckVisitor typeChecker =
         new TypeCheckVisitor(symbolTable, wrapper, errors, scopeAnnotator);
     typeChecker.visit(tree);
 
-    if (errors.hasErrors()) return null;
+    if (errors.hasErrors()) {
+      return null;
+    }
 
     // PASS 3: Evaluation
     EvaluationVisitor evaluator =

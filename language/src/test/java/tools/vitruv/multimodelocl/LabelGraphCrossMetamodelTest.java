@@ -9,10 +9,12 @@
  *
  * Contributors:
  *    Max Oesterle - initial API and implementation
- *******************************************************************************/
+ ******************************************************************************/
+
 package tools.vitruv.multimodelocl;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeAll;
@@ -35,13 +37,13 @@ import tools.vitruv.multimodelocl.pipeline.MultiModelOCLInterface;
  *
  * <h2>Name Convention</h2>
  *
- * Both models use {@code SimpleNode} names of the form {@code "SN|G2|NNN"} where {@code NNN} is a
- * zero-padded three-digit number. {@code substring(7, 9)} (1-indexed, inclusive) extracts {@code
+ * <p>Both models use {@code SimpleNode} names of the form {@code "SN|G2|NNN"} where {@code NNN} is
+ * a zero-padded three-digit number. {@code substring(7, 9)} (1-indexed, inclusive) extracts {@code
  * NNN} and serves as the unique correspondence key across the two metamodels.
  *
  * <h2>Constraint Semantics</h2>
  *
- * The four constraints tested here correspond to four levels of cross-metamodel consistency
+ * <p>The four constraints tested here correspond to four levels of cross-metamodel consistency
  * checking:
  *
  * <ol>
@@ -54,7 +56,7 @@ import tools.vitruv.multimodelocl.pipeline.MultiModelOCLInterface;
  *
  * <h2>Model Instances</h2>
  *
- * Both {@code base.labelgraph1} and {@code base.labelgraph2} contain 1000 {@code SimpleNode}
+ * <p>Both {@code base.labelgraph1} and {@code base.labelgraph2} contain 1000 {@code SimpleNode}
  * objects each. Every name from LG1 appears exactly once in LG2 with the same label, so all four
  * constraints are satisfied on the base models.
  *
@@ -86,6 +88,7 @@ public class LabelGraphCrossMetamodelTest {
    */
   private static final Path BASE_LABELGRAPH2 = Path.of("base.labelgraph2");
 
+  /** Registers the test model base path before all tests run. */
   @BeforeAll
   public static void setupPaths() {
     MetamodelWrapper.TEST_MODELS_PATH = Path.of("src/test/resources/test-models");
@@ -249,16 +252,14 @@ public class LabelGraphCrossMetamodelTest {
         "Corresponding LG1/LG2 SimpleNodes should have identical label values");
   }
 
-  // ==================== Violation test: forAll label consistency ====================
+  // ==================== Violation test: forAll vacuously true ====================
 
   /**
-   * Tests that the {@code forAll} label constraint is violated when LG2 contains a node whose label
-   * differs from its LG1 correspondent.
+   * Tests that the {@code forAll} constraint is vacuously true when no LG2 instances are loaded.
    *
-   * <p>Uses only the {@code base.labelgraph2} instance as the LG1 source (no LG2 nodes loaded), so
-   * {@code Labelgraph2::SimpleNode.allInstances()} returns an empty collection. {@code forAll} on
-   * an empty collection is vacuously true, so this variant does not test a violation per se — it
-   * instead documents that the constraint requires both models to be present.
+   * <p>Without any {@code Labelgraph2::SimpleNode} instances, {@code allInstances()} returns an
+   * empty collection. {@code forAll} on an empty collection is vacuously true, so this variant
+   * documents that the constraint requires both models to be present for a meaningful check.
    *
    * <p>Expected: satisfied (vacuously), because without LG2 instances the {@code forAll} body is
    * never evaluated.

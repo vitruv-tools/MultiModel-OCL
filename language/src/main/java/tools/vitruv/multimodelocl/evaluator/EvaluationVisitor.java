@@ -459,7 +459,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   public Value visitIncludesOp(OCLParser.IncludesOpContext ctx) {
     Value receiver = receiverStack.peek();
     Value arg = visit(ctx.arg);
-    if (arg.size() != 1) return error("includes() requires singleton", ctx);
+    if (arg.size() != 1) {
+      return error("includes() requires singleton", ctx);
+    }
 
     OCLElement searchElem = arg.getElements().get(0);
     boolean result = receiver.includes(searchElem);
@@ -481,7 +483,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   public Value visitIncludingOp(OCLParser.IncludingOpContext ctx) {
     Value receiver = receiverStack.peek();
     Value arg = visit(ctx.arg);
-    if (arg.size() != 1) return error("including() requires singleton", ctx);
+    if (arg.size() != 1) {
+      return error("including() requires singleton", ctx);
+    }
     return receiver.including(arg.getElements().get(0));
   }
 
@@ -499,7 +503,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   public Value visitExcludingOp(OCLParser.ExcludingOpContext ctx) {
     Value receiver = receiverStack.peek();
     Value arg = visit(ctx.arg);
-    if (arg.size() != 1) return error("excluding() requires singleton", ctx);
+    if (arg.size() != 1) {
+      return error("excluding() requires singleton", ctx);
+    }
     return receiver.excluding(arg.getElements().get(0));
   }
 
@@ -517,7 +523,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   public Value visitExcludesOp(OCLParser.ExcludesOpContext ctx) {
     Value receiver = receiverStack.peek();
     Value arg = visit(ctx.arg);
-    if (arg.size() != 1) return error("excludes() requires singleton", ctx);
+    if (arg.size() != 1) {
+      return error("excludes() requires singleton", ctx);
+    }
     return Value.boolValue(receiver.excludes(arg.getElements().get(0)));
   }
 
@@ -611,7 +619,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   @Override
   public Value visitMaxOp(OCLParser.MaxOpContext ctx) {
     Value receiver = receiverStack.peek();
-    if (receiver.isEmpty()) return Value.empty(Type.INTEGER);
+    if (receiver.isEmpty()) {
+      return Value.empty(Type.INTEGER);
+    }
     int max = Integer.MIN_VALUE;
     for (OCLElement elem : receiver.getElements()) {
       Integer val = elem.tryGetInt();
@@ -636,7 +646,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   @Override
   public Value visitMinOp(OCLParser.MinOpContext ctx) {
     Value receiver = receiverStack.peek();
-    if (receiver.isEmpty()) return Value.empty(Type.INTEGER);
+    if (receiver.isEmpty()) {
+      return Value.empty(Type.INTEGER);
+    }
     int min = Integer.MAX_VALUE;
     for (OCLElement elem : receiver.getElements()) {
       Integer val = elem.tryGetInt();
@@ -661,7 +673,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   @Override
   public Value visitAvgOp(OCLParser.AvgOpContext ctx) {
     Value receiver = receiverStack.peek();
-    if (receiver.isEmpty()) return Value.empty(Type.INTEGER);
+    if (receiver.isEmpty()) {
+      return Value.empty(Type.INTEGER);
+    }
     int sum = 0;
     for (OCLElement elem : receiver.getElements()) {
       Integer value = elem.tryGetInt();
@@ -3355,10 +3369,18 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
    * @return ¡t! if t is a bare scalar, t unchanged if already wrapped
    */
   private Type normalizeToSingleton(Type t) {
-    if (t == Type.ERROR || t == Type.ANY) return t;
-    if (t.isCollection()) return t; // {T}, [T], <T>, {{T}} — already proper ctype
-    if (t.isSingleton()) return t; // !T! — already wrapped
-    if (t.isOptional()) return t; // ?T? — already wrapped
+    if (t == Type.ERROR || t == Type.ANY) {
+      return t;
+    }
+    if (t.isCollection()) {
+      return t;
+    } // {T}, [T], <T>, {{T}} — already proper ctype
+    if (t.isSingleton()) {
+      return t;
+    } // !T! — already wrapped
+    if (t.isOptional()) {
+      return t;
+    } // ?T? — already wrapped
     return Type.singleton(t); // bare INTEGER, STRING, cad::Sphere → !T!
   }
 
@@ -3371,8 +3393,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
    * @return the member type τ, or t if it has no wrapper
    */
   private Type unwrapOne(Type t) {
-    if (t == Type.ERROR || t == Type.ANY) return t;
-    if (t.isCollection() || t.isSingleton() || t.isOptional()) return t.getElementType();
+    if (t == Type.ERROR || t == Type.ANY) {
+      return t;
+    }
+    if (t.isCollection() || t.isSingleton() || t.isOptional()) {
+      return t.getElementType();
+    }
     return t; // bare type — already scalar
   }
 }

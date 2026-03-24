@@ -824,9 +824,15 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
    * @return true if types are comparable
    */
   private boolean areComparable(Type t1, Type t2) {
-    if (t1 == Type.ERROR || t2 == Type.ERROR) return true;
-    if (t1.equals(t2)) return true;
-    if (t1.isConformantTo(t2) || t2.isConformantTo(t1)) return true;
+    if (t1 == Type.ERROR || t2 == Type.ERROR) {
+      return true;
+    }
+    if (t1.equals(t2)) {
+      return true;
+    }
+    if (t1.isConformantTo(t2) || t2.isConformantTo(t1)) {
+      return true;
+    }
 
     // Unwrap collections and compare element types
     Type e1 = t1.isCollection() ? t1.getElementType() : t1;
@@ -4056,18 +4062,26 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
    * @return ¡t! if t is a bare scalar or metaclass, t unchanged if already a proper ctype
    */
   private Type normalizeToSingleton(Type t) {
-    if (t == Type.ERROR || t == Type.ANY) return t;
-    if (t.isCollection()) return t; // {T}, [T], <T>, {{T}} — already proper ctype
-    if (t.isSingleton()) return t; // !T! — already wrapped
-    if (t.isOptional()) return t; // ?T? — already wrapped
+    if (t == Type.ERROR || t == Type.ANY) {
+      return t;
+    }
+    if (t.isCollection()) {
+      return t;
+    } // {T}, [T], <T>, {{T}} — already proper ctype
+    if (t.isSingleton()) {
+      return t;
+    } // !T! — already wrapped
+    if (t.isOptional()) {
+      return t;
+    } // ?T? — already wrapped
     return Type.singleton(t); // bare INTEGER, STRING, cad::Sphere → !T!
   }
 
   /**
    * Checks conformance with singleton-unwrapping rules at let-binding sites.
    *
-   * <p><pA singleton ¡T! can be bound to a variable declared as T, and vice versa. Also handles
-   * optional ?T? binding to T.
+   * <p>A singleton {@code !T!} can be bound to a variable declared as T, and vice versa. Also
+   * handles optional {@code ?T?} binding to T.
    *
    * <p>Examples:
    *

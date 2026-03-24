@@ -339,8 +339,12 @@ public sealed interface OCLElement
    * @return {@code true} if semantically equal
    */
   static boolean semanticEquals(OCLElement a, OCLElement b) {
-    if (a == null && b == null) return true;
-    if (a == null || b == null) return false;
+    if (a == null && b == null) {
+      return true;
+    }
+    if (a == null || b == null) {
+      return false;
+    }
 
     // ── Numeric cross-type equality ──────────────────────────────────────────
     if (isNumeric(a) && isNumeric(b)) {
@@ -396,9 +400,15 @@ public sealed interface OCLElement
    * @return negative if {@code a < b}, zero if equal, positive if {@code a > b}
    */
   static int compare(OCLElement a, OCLElement b) {
-    if (a == b) return 0;
-    if (a == null) return -1;
-    if (b == null) return 1;
+    if (a == b) {
+      return 0;
+    }
+    if (a == null) {
+      return -1;
+    }
+    if (b == null) {
+      return 1;
+    }
 
     int typeA = getTypeOrder(a);
     int typeB = getTypeOrder(b);
@@ -446,15 +456,33 @@ public sealed interface OCLElement
    */
   static int getTypeOrder(OCLElement elem) {
     // All numeric types share bucket 0 for cross-type comparison
-    if (elem instanceof IntValue) return 0;
-    if (elem instanceof FloatValue) return 0;
-    if (elem instanceof DoubleValue) return 0;
-    if (elem instanceof BoolValue) return 1;
-    if (elem instanceof StringValue) return 2;
-    if (elem instanceof EnumValue) return 3;
-    if (elem instanceof ObjectRef) return 4;
-    if (elem instanceof MetaclassValue) return 5;
-    if (elem instanceof NestedCollection) return 6;
+    if (elem instanceof IntValue) {
+      return 0;
+    }
+    if (elem instanceof FloatValue) {
+      return 0;
+    }
+    if (elem instanceof DoubleValue) {
+      return 0;
+    }
+    if (elem instanceof BoolValue) {
+      return 1;
+    }
+    if (elem instanceof StringValue) {
+      return 2;
+    }
+    if (elem instanceof EnumValue) {
+      return 3;
+    }
+    if (elem instanceof ObjectRef) {
+      return 4;
+    }
+    if (elem instanceof MetaclassValue) {
+      return 5;
+    }
+    if (elem instanceof NestedCollection) {
+      return 6;
+    }
     return 7;
   }
 }

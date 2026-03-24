@@ -376,8 +376,12 @@ public class Value {
 
   /** Semantic equality (≡χ₁,χ₂). Compares normalized forms. */
   public static boolean semanticEquals(Value v1, Value v2) {
-    if (v1 == null && v2 == null) return true;
-    if (v1 == null || v2 == null) return false;
+    if (v1 == null && v2 == null) {
+      return true;
+    }
+    if (v1 == null || v2 == null) {
+      return false;
+    }
 
     Value norm1 = v1.normalize();
     Value norm2 = v2.normalize();
@@ -425,9 +429,15 @@ public class Value {
    * for NestedCollection comparison.
    */
   public static int compare(Value v1, Value v2) {
-    if (v1 == v2) return 0;
-    if (v1 == null) return -1;
-    if (v2 == null) return 1;
+    if (v1 == v2) {
+      return 0;
+    }
+    if (v1 == null) {
+      return -1;
+    }
+    if (v2 == null) {
+      return 1;
+    }
 
     // First compare by size
     int sizeCompare = Integer.compare(v1.size(), v2.size());
@@ -470,10 +480,18 @@ public class Value {
 
   /** Returns the collection kind based on Ctype properties. */
   private String getCollectionKind() {
-    if (runtimeType.isUnique() && !runtimeType.isOrdered()) return "Set";
-    if (!runtimeType.isUnique() && runtimeType.isOrdered()) return "Sequence";
-    if (!runtimeType.isUnique() && !runtimeType.isOrdered()) return "Bag";
-    if (runtimeType.isUnique() && runtimeType.isOrdered()) return "OrderedSet";
+    if (runtimeType.isUnique() && !runtimeType.isOrdered()) {
+      return "Set";
+    }
+    if (!runtimeType.isUnique() && runtimeType.isOrdered()) {
+      return "Sequence";
+    }
+    if (!runtimeType.isUnique() && !runtimeType.isOrdered()) {
+      return "Bag";
+    }
+    if (runtimeType.isUnique() && runtimeType.isOrdered()) {
+      return "OrderedSet";
+    }
     return "Collection";
   }
 
