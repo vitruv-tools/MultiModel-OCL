@@ -1,4 +1,4 @@
-    /*******************************************************************************
+/*******************************************************************************
  * Copyright (c) 2026 Max Oesterle
  *
  * This program and the accompanying materials are made available under the
@@ -65,6 +65,14 @@ public sealed interface OCLElement
    * checks in calling code.
    */
   default String tryGetString() {
+    return null;
+  }
+
+  /**
+   * Try to get float value; returns {@code null} if not a {@link FloatValue}. Avoids instanceof
+   * checks in calling code.
+   */
+  default Float tryGetFloat() {
     return null;
   }
 
@@ -146,6 +154,11 @@ public sealed interface OCLElement
     @Override
     public String toString() {
       return String.valueOf(value);
+    }
+
+    @Override
+    public Float tryGetFloat() {
+      return value;
     }
 
     @Override
