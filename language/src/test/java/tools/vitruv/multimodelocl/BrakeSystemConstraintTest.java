@@ -9,10 +9,12 @@
  *
  * Contributors:
  *    Max Oesterle - initial API and implementation
- *******************************************************************************/
+ ******************************************************************************/
+
 package tools.vitruv.multimodelocl;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeAll;
@@ -39,6 +41,7 @@ public class BrakeSystemConstraintTest {
   private static final Path BRAKESYSTEM_INSTANCE = Path.of("brakesystem.brakesystem");
   private static final Path CAD_INSTANCE = Path.of("brake_disc_and_caliper_plate.cad");
 
+  /** Registers the test model base path before all tests run. */
   @BeforeAll
   public static void setupPaths() {
     MetamodelWrapper.TEST_MODELS_PATH = Path.of("src/test/resources/test-models");
@@ -58,10 +61,12 @@ public class BrakeSystemConstraintTest {
   public void testCaliperCoordinatesWithinDiskRadius() throws Exception {
     String constraint =
         """
-context brakesystem::BrakeDisk inv coordinatesWithinRadius:
-  let cadCaliper = cad::Namespace.allInstances().select(b | b.id == brakesystem::BrakeCaliper.allInstances().first().id) in
-  cadCaliper.parameters.select(p | p.oclIsTypeOf(cad::Coordinate)).forAll(p | p.oclAsType(cad::Coordinate).x <= self.diameterInMM / 2)
-""";
+        context brakesystem::BrakeDisk inv coordinatesWithinRadius:
+          let cadCaliper = cad::Namespace.allInstances()
+            .select(b | b.id == brakesystem::BrakeCaliper.allInstances().first().id) in
+          cadCaliper.parameters.select(p | p.oclIsTypeOf(cad::Coordinate))
+            .forAll(p | p.oclAsType(cad::Coordinate).x <= self.diameterInMM / 2)
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -84,12 +89,14 @@ context brakesystem::BrakeDisk inv coordinatesWithinRadius:
   public void testCaliperCoordinatesOutsideDiskRadius() throws Exception {
     String constraint =
         """
-context brakesystem::BrakeDisk inv:
-  let cadDisk = cad::Namespace.allInstances().select(b | b.id == self.id) in
-  let brakeCaliper = brakesystem::BrakeCaliper.allInstances().first() in
-  let cadCaliper = cad::Namespace.allInstances().select(b | b.id == brakeCaliper.id) in
-  cadCaliper.parameters.select(p | p.oclIsTypeOf(cad::Coordinate)).forAll(p | p.oclAsType(cad::Coordinate).x >= self.diameterInMM / 2)
-""";
+        context brakesystem::BrakeDisk inv:
+          let cadDisk = cad::Namespace.allInstances().select(b | b.id == self.id) in
+          let brakeCaliper = brakesystem::BrakeCaliper.allInstances().first() in
+          let cadCaliper = cad::Namespace.allInstances()
+            .select(b | b.id == brakeCaliper.id) in
+          cadCaliper.parameters.select(p | p.oclIsTypeOf(cad::Coordinate))
+            .forAll(p | p.oclAsType(cad::Coordinate).x >= self.diameterInMM / 2)
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -112,10 +119,11 @@ context brakesystem::BrakeDisk inv:
   public void testFilterCoordinatesFromMixedParameters() throws Exception {
     String constraint =
         """
-context brakesystem::BrakeDisk inv onlyCoordinates:
-  let cadCaliper = cad::Namespace.allInstances().select(b | b.id == brakesystem::BrakeCaliper.allInstances().first().id) in
-  cadCaliper.parameters.select(p | p.oclIsTypeOf(cad::Coordinate)).size() == 4
-""";
+        context brakesystem::BrakeDisk inv onlyCoordinates:
+          let cadCaliper = cad::Namespace.allInstances()
+            .select(b | b.id == brakesystem::BrakeCaliper.allInstances().first().id) in
+          cadCaliper.parameters.select(p | p.oclIsTypeOf(cad::Coordinate)).size() == 4
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -128,14 +136,18 @@ context brakesystem::BrakeDisk inv onlyCoordinates:
         result.isSatisfied(), "Should find exactly 4 Coordinate parameters in caliper namespace");
   }
 
+  /**
+   * Tests that oclIsKindOf finds all Parameter subtypes including Coordinate and NumericParameter.
+   */
   @Test
   public void testFilterAllParameterSubtypes() throws Exception {
     String constraint =
         """
-context brakesystem::BrakeDisk inv allSubtypes:
-  let cadCaliper = cad::Namespace.allInstances().select(b | b.id == brakesystem::BrakeCaliper.allInstances().first().id) in
-  cadCaliper.parameters.select(p | p.oclIsKindOf(cad::Parameter)).size() == 5
-""";
+        context brakesystem::BrakeDisk inv allSubtypes:
+          let cadCaliper = cad::Namespace.allInstances()
+            .select(b | b.id == brakesystem::BrakeCaliper.allInstances().first().id) in
+          cadCaliper.parameters.select(p | p.oclIsKindOf(cad::Parameter)).size() == 5
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -149,6 +161,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
         "Should find all 5 parameters (Coordinate + NumericParameter) via oclIsKindOf");
   }
 
+  /** Tests that oclAsType property access on x-coordinates returns a collection of size 2. */
   @Test
   public void testOclAsTypePropertyAccessX() throws Exception {
     String constraint =
@@ -168,14 +181,15 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSuccess(), "Evaluation should succeed: " + result.toDetailedErrorString());
   }
 
+  /** Tests the original constraint using string concatenation to avoid line-length issues. */
   @Test
   public void testOriginalConstraintExact() throws Exception {
     String constraint =
         "context brakesystem::BrakeDisk inv:\n"
             + "  let cadDisk = cad::Namespace.allInstances().select(b | b.id == self.id) in\n"
             + "  let brakeCaliper = brakesystem::BrakeCaliper.allInstances().first() in\n"
-            + "  let cadCaliper = cad::Namespace.allInstances().select(b | b.id == brakeCaliper.id)"
-            + " in\n"
+            + "  let cadCaliper = cad::Namespace.allInstances()"
+            + ".select(b | b.id == brakeCaliper.id) in\n"
             + "  cadCaliper.parameters.select(p | p.oclIsTypeOf(cad::Coordinate)).forAll(p |"
             + " p.oclAsType(cad::Coordinate).x <= self.diameterInMM / 2)";
 
@@ -195,6 +209,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
   // CAD basic validity constraints
   // ---------------------------------------------------------------------------
 
+  /** Tests that all Sphere instances have a positive radius. */
   @Test
   public void testSphereRadiusPositive() throws Exception {
     String constraint =
@@ -211,6 +226,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All spheres should have positive radius");
   }
 
+  /** Tests that all Cylinder instances have a positive radius. */
   @Test
   public void testCylinderRadiusPositive() throws Exception {
     String constraint =
@@ -227,6 +243,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All cylinders should have positive radius");
   }
 
+  /** Tests that all Cylinder instances have distinct top and bottom center points. */
   @Test
   public void testCylinderDistinctEndpoints() throws Exception {
     String constraint =
@@ -245,6 +262,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All cylinders should have distinct top/bottom centers");
   }
 
+  /** Tests that all Cone instances have a positive base radius. */
   @Test
   public void testConeBaseRadiusPositive() throws Exception {
     String constraint =
@@ -261,6 +279,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All cones should have positive base radius");
   }
 
+  /** Tests that all Cone instances have distinct base center and apex points. */
   @Test
   public void testConeDistinctBaseAndApex() throws Exception {
     String constraint =
@@ -279,6 +298,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All cones should have distinct base center and apex");
   }
 
+  /** Tests that all Tube instances have a positive outer radius. */
   @Test
   public void testTubeOuterRadiusPositive() throws Exception {
     String constraint =
@@ -295,6 +315,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All tubes should have positive outer radius");
   }
 
+  /** Tests that all Tube instances have a non-negative inner radius. */
   @Test
   public void testTubeInnerRadiusNonNegative() throws Exception {
     String constraint =
@@ -311,6 +332,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All tubes should have non-negative inner radius");
   }
 
+  /** Tests that all Tube instances have outer radius strictly larger than inner radius. */
   @Test
   public void testTubeOuterLargerThanInner() throws Exception {
     String constraint =
@@ -327,6 +349,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All tubes should have outer radius larger than inner radius");
   }
 
+  /** Tests that all Tube instances have distinct top and bottom center points. */
   @Test
   public void testTubeDistinctEndpoints() throws Exception {
     String constraint =
@@ -345,6 +368,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All tubes should have distinct top/bottom centers");
   }
 
+  /** Tests that all Prism instances have a non-zero extrusion vector. */
   @Test
   public void testPrismExtrusionNonZero() throws Exception {
     String constraint =
@@ -363,6 +387,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All prisms should have a non-zero extrusion vector");
   }
 
+  /** Tests that all Prism base profiles have at least 3 vertices. */
   @Test
   public void testPrismBaseProfileHasEnoughVertices() throws Exception {
     String constraint =
@@ -379,6 +404,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "All prism base profiles should have at least 3 vertices");
   }
 
+  /** Tests that all Pyramid instances have a defined (non-null) apex. */
   @Test
   public void testPyramidApexDefined() throws Exception {
     String constraint =
@@ -399,6 +425,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
   // CAD non-intersection constraints: Sphere
   // ---------------------------------------------------------------------------
 
+  /** Tests that spheres from different namespaces do not intersect with other spheres. */
   @Test
   public void testSphereNoIntersectWithSphere() throws Exception {
     String constraint =
@@ -427,6 +454,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
     assertTrue(result.isSatisfied(), "Spheres in different namespaces should not intersect");
   }
 
+  /** Tests that spheres from different namespaces do not intersect with cylinders. */
   @Test
   public void testSphereNoIntersectWithCylinder() throws Exception {
     String constraint =
@@ -463,6 +491,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
         result.isSatisfied(), "Spheres should not intersect with cylinders in foreign namespaces");
   }
 
+  /** Tests that spheres from different namespaces do not intersect with cones. */
   @Test
   public void testSphereNoIntersectWithCone() throws Exception {
     String constraint =
@@ -499,6 +528,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
         result.isSatisfied(), "Spheres should not intersect with cones in foreign namespaces");
   }
 
+  /** Tests that spheres from different namespaces do not intersect with tubes. */
   @Test
   public void testSphereNoIntersectWithTube() throws Exception {
     String constraint =
@@ -535,6 +565,7 @@ context brakesystem::BrakeDisk inv allSubtypes:
         result.isSatisfied(), "Spheres should not intersect with tubes in foreign namespaces");
   }
 
+  /** Tests that spheres from different namespaces do not intersect with boxes. */
   @Test
   public void testSphereNoIntersectWithBox() throws Exception {
     String constraint =
@@ -582,42 +613,49 @@ context brakesystem::BrakeDisk inv allSubtypes:
         result.isSatisfied(), "Spheres should not intersect with boxes in foreign namespaces");
   }
 
+  /** Tests that spheres from different namespaces do not intersect with prisms. */
   @Test
   public void testSphereNoIntersectWithPrism() throws Exception {
     String constraint =
         """
-context cad::Sphere inv noIntersectWithPrism:
-  let foreignShapes =
-    cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
-      .collect(ns | ns.shapes).flatten()
-  in
-  foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
-    .forAll(other |
-      let o: cad::Prism = other.oclAsType(cad::Prism) in
-      let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
-      let minX: Real = verts.collect(v | v.x).min() in
-      let maxX: Real = verts.collect(v | v.x).max() in
-      let minY: Real = verts.collect(v | v.y).min() in
-      let maxY: Real = verts.collect(v | v.y).max() in
-      let minZ: Real = verts.collect(v | v.z).min() in
-      let maxZ: Real = verts.collect(v | v.z).max() in
-      let extMaxX: Real = if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
-      let extMinX: Real = if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
-      let extMaxY: Real = if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
-      let extMinY: Real = if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
-      let extMaxZ: Real = if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
-      let extMinZ: Real = if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
-      let pcx: Real = (extMinX + extMaxX) / 2.0 in
-      let pcy: Real = (extMinY + extMaxY) / 2.0 in
-      let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
-      let dx: Real = self.center.x - pcx in
-      let dy: Real = self.center.y - pcy in
-      let dz: Real = self.center.z - pcz in
-      dx.abs() >= self.radius + (extMaxX - extMinX) / 2.0 or
-      dy.abs() >= self.radius + (extMaxY - extMinY) / 2.0 or
-      dz.abs() >= self.radius + (extMaxZ - extMinZ) / 2.0
-    )
-""";
+        context cad::Sphere inv noIntersectWithPrism:
+          let foreignShapes =
+            cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
+              .collect(ns | ns.shapes).flatten()
+          in
+          foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
+            .forAll(other |
+              let o: cad::Prism = other.oclAsType(cad::Prism) in
+              let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
+              let minX: Real = verts.collect(v | v.x).min() in
+              let maxX: Real = verts.collect(v | v.x).max() in
+              let minY: Real = verts.collect(v | v.y).min() in
+              let maxY: Real = verts.collect(v | v.y).max() in
+              let minZ: Real = verts.collect(v | v.z).min() in
+              let maxZ: Real = verts.collect(v | v.z).max() in
+              let extMaxX: Real =
+                if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
+              let extMinX: Real =
+                if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
+              let extMaxY: Real =
+                if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
+              let extMinY: Real =
+                if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
+              let extMaxZ: Real =
+                if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
+              let extMinZ: Real =
+                if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
+              let pcx: Real = (extMinX + extMaxX) / 2.0 in
+              let pcy: Real = (extMinY + extMaxY) / 2.0 in
+              let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
+              let dx: Real = self.center.x - pcx in
+              let dy: Real = self.center.y - pcy in
+              let dz: Real = self.center.z - pcz in
+              dx.abs() >= self.radius + (extMaxX - extMinX) / 2.0 or
+              dy.abs() >= self.radius + (extMaxY - extMinY) / 2.0 or
+              dz.abs() >= self.radius + (extMaxZ - extMinZ) / 2.0
+            )
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -628,6 +666,7 @@ context cad::Sphere inv noIntersectWithPrism:
         result.isSatisfied(), "Spheres should not intersect with prisms in foreign namespaces");
   }
 
+  /** Tests that spheres from different namespaces do not intersect with pyramids. */
   @Test
   public void testSphereNoIntersectWithPyramid() throws Exception {
     String constraint =
@@ -660,6 +699,7 @@ context cad::Sphere inv noIntersectWithPrism:
   // CAD non-intersection constraints: Cylinder
   // ---------------------------------------------------------------------------
 
+  /** Tests that cylinders from different namespaces do not intersect with other cylinders. */
   @Test
   public void testCylinderNoIntersectWithCylinder() throws Exception {
     String constraint =
@@ -690,7 +730,8 @@ context cad::Sphere inv noIntersectWithPrism:
               let dy: Real = cy1 - cy2 in
               let dz: Real = cz1 - cz2 in
               let rSum: Real = self.radius + o.radius in
-              dx*dx + dy*dy + dz*dz >= (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
+              dx*dx + dy*dy + dz*dz >=
+                (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
             )
         """;
 
@@ -704,6 +745,7 @@ context cad::Sphere inv noIntersectWithPrism:
         "Cylinders should not intersect with cylinders in foreign namespaces");
   }
 
+  /** Tests that cylinders from different namespaces do not intersect with cones. */
   @Test
   public void testCylinderNoIntersectWithCone() throws Exception {
     String constraint =
@@ -734,7 +776,8 @@ context cad::Sphere inv noIntersectWithPrism:
               let dy: Real = cy1 - cy2 in
               let dz: Real = cz1 - cz2 in
               let rSum: Real = self.radius + o.baseRadius in
-              dx*dx + dy*dy + dz*dz >= (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
+              dx*dx + dy*dy + dz*dz >=
+                (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
             )
         """;
 
@@ -747,6 +790,7 @@ context cad::Sphere inv noIntersectWithPrism:
         result.isSatisfied(), "Cylinders should not intersect with cones in foreign namespaces");
   }
 
+  /** Tests that cylinders from different namespaces do not intersect with tubes. */
   @Test
   public void testCylinderNoIntersectWithTube() throws Exception {
     String constraint =
@@ -777,7 +821,8 @@ context cad::Sphere inv noIntersectWithPrism:
               let dy: Real = cy1 - cy2 in
               let dz: Real = cz1 - cz2 in
               let rSum: Real = self.radius + o.outerRadius in
-              dx*dx + dy*dy + dz*dz >= (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
+              dx*dx + dy*dy + dz*dz >=
+                (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
             )
         """;
 
@@ -790,6 +835,7 @@ context cad::Sphere inv noIntersectWithPrism:
         result.isSatisfied(), "Cylinders should not intersect with tubes in foreign namespaces");
   }
 
+  /** Tests that cylinders from different namespaces do not intersect with boxes. */
   @Test
   public void testCylinderNoIntersectWithBox() throws Exception {
     String constraint =
@@ -844,51 +890,58 @@ context cad::Sphere inv noIntersectWithPrism:
         result.isSatisfied(), "Cylinders should not intersect with boxes in foreign namespaces");
   }
 
+  /** Tests that cylinders from different namespaces do not intersect with prisms. */
   @Test
   public void testCylinderNoIntersectWithPrism() throws Exception {
     String constraint =
         """
-context cad::Cylinder inv noIntersectWithPrism:
-  let foreignShapes =
-    cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
-      .collect(ns | ns.shapes).flatten()
-  in
-  foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
-    .forAll(other |
-      let o: cad::Prism = other.oclAsType(cad::Prism) in
-      let cx1: Real = (self.bottomCenter.x + self.topCenter.x) / 2.0 in
-      let cy1: Real = (self.bottomCenter.y + self.topCenter.y) / 2.0 in
-      let cz1: Real = (self.bottomCenter.z + self.topCenter.z) / 2.0 in
-      let ax1x: Real = self.topCenter.x - self.bottomCenter.x in
-      let ax1y: Real = self.topCenter.y - self.bottomCenter.y in
-      let ax1z: Real = self.topCenter.z - self.bottomCenter.z in
-      let halfH1: Real = (ax1x*ax1x + ax1y*ax1y + ax1z*ax1z) / 4.0 in
-      let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
-      let minX: Real = verts.collect(v | v.x).min() in
-      let maxX: Real = verts.collect(v | v.x).max() in
-      let minY: Real = verts.collect(v | v.y).min() in
-      let maxY: Real = verts.collect(v | v.y).max() in
-      let minZ: Real = verts.collect(v | v.z).min() in
-      let maxZ: Real = verts.collect(v | v.z).max() in
-      let extMaxX: Real = if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
-      let extMinX: Real = if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
-      let extMaxY: Real = if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
-      let extMinY: Real = if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
-      let extMaxZ: Real = if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
-      let extMinZ: Real = if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
-      let pcx: Real = (extMinX + extMaxX) / 2.0 in
-      let pcy: Real = (extMinY + extMaxY) / 2.0 in
-      let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
-      let dx: Real = cx1 - pcx in
-      let dy: Real = cy1 - pcy in
-      let dz: Real = cz1 - pcz in
-      let bound: Real = self.radius + halfH1 +
-                        (extMaxX - extMinX) / 2.0 +
-                        (extMaxY - extMinY) / 2.0 +
-                        (extMaxZ - extMinZ) / 2.0 in
-      dx*dx + dy*dy + dz*dz >= bound * bound
-    )
-""";
+        context cad::Cylinder inv noIntersectWithPrism:
+          let foreignShapes =
+            cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
+              .collect(ns | ns.shapes).flatten()
+          in
+          foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
+            .forAll(other |
+              let o: cad::Prism = other.oclAsType(cad::Prism) in
+              let cx1: Real = (self.bottomCenter.x + self.topCenter.x) / 2.0 in
+              let cy1: Real = (self.bottomCenter.y + self.topCenter.y) / 2.0 in
+              let cz1: Real = (self.bottomCenter.z + self.topCenter.z) / 2.0 in
+              let ax1x: Real = self.topCenter.x - self.bottomCenter.x in
+              let ax1y: Real = self.topCenter.y - self.bottomCenter.y in
+              let ax1z: Real = self.topCenter.z - self.bottomCenter.z in
+              let halfH1: Real = (ax1x*ax1x + ax1y*ax1y + ax1z*ax1z) / 4.0 in
+              let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
+              let minX: Real = verts.collect(v | v.x).min() in
+              let maxX: Real = verts.collect(v | v.x).max() in
+              let minY: Real = verts.collect(v | v.y).min() in
+              let maxY: Real = verts.collect(v | v.y).max() in
+              let minZ: Real = verts.collect(v | v.z).min() in
+              let maxZ: Real = verts.collect(v | v.z).max() in
+              let extMaxX: Real =
+                if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
+              let extMinX: Real =
+                if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
+              let extMaxY: Real =
+                if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
+              let extMinY: Real =
+                if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
+              let extMaxZ: Real =
+                if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
+              let extMinZ: Real =
+                if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
+              let pcx: Real = (extMinX + extMaxX) / 2.0 in
+              let pcy: Real = (extMinY + extMaxY) / 2.0 in
+              let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
+              let dx: Real = cx1 - pcx in
+              let dy: Real = cy1 - pcy in
+              let dz: Real = cz1 - pcz in
+              let bound: Real = self.radius + halfH1 +
+                                (extMaxX - extMinX) / 2.0 +
+                                (extMaxY - extMinY) / 2.0 +
+                                (extMaxZ - extMinZ) / 2.0 in
+              dx*dx + dy*dy + dz*dz >= bound * bound
+            )
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -899,6 +952,7 @@ context cad::Cylinder inv noIntersectWithPrism:
         result.isSatisfied(), "Cylinders should not intersect with prisms in foreign namespaces");
   }
 
+  /** Tests that cylinders from different namespaces do not intersect with pyramids. */
   @Test
   public void testCylinderNoIntersectWithPyramid() throws Exception {
     String constraint =
@@ -939,6 +993,7 @@ context cad::Cylinder inv noIntersectWithPrism:
   // CAD non-intersection constraints: Cone
   // ---------------------------------------------------------------------------
 
+  /** Tests that cones from different namespaces do not intersect with other cones. */
   @Test
   public void testConeNoIntersectWithCone() throws Exception {
     String constraint =
@@ -969,7 +1024,8 @@ context cad::Cylinder inv noIntersectWithPrism:
               let dy: Real = cy1 - cy2 in
               let dz: Real = cz1 - cz2 in
               let rSum: Real = self.baseRadius + o.baseRadius in
-              dx*dx + dy*dy + dz*dz >= (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
+              dx*dx + dy*dy + dz*dz >=
+                (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
             )
         """;
 
@@ -981,6 +1037,7 @@ context cad::Cylinder inv noIntersectWithPrism:
     assertTrue(result.isSatisfied(), "Cones should not intersect with cones in foreign namespaces");
   }
 
+  /** Tests that cones from different namespaces do not intersect with tubes. */
   @Test
   public void testConeNoIntersectWithTube() throws Exception {
     String constraint =
@@ -1011,7 +1068,8 @@ context cad::Cylinder inv noIntersectWithPrism:
               let dy: Real = cy1 - cy2 in
               let dz: Real = cz1 - cz2 in
               let rSum: Real = self.baseRadius + o.outerRadius in
-              dx*dx + dy*dy + dz*dz >= (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
+              dx*dx + dy*dy + dz*dz >=
+                (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
             )
         """;
 
@@ -1023,6 +1081,7 @@ context cad::Cylinder inv noIntersectWithPrism:
     assertTrue(result.isSatisfied(), "Cones should not intersect with tubes in foreign namespaces");
   }
 
+  /** Tests that cones from different namespaces do not intersect with boxes. */
   @Test
   public void testConeNoIntersectWithBox() throws Exception {
     String constraint =
@@ -1077,52 +1136,59 @@ context cad::Cylinder inv noIntersectWithPrism:
     assertTrue(result.isSatisfied(), "Cones should not intersect with boxes in foreign namespaces");
   }
 
+  /** Tests that cones from different namespaces do not intersect with prisms. */
   @Test
   public void testConeNoIntersectWithPrism() throws Exception {
     String constraint =
         """
-context cad::Cone inv noIntersectWithPrism:
-  let foreignShapes: Set(Shape) =
-    cad::Namespace.allInstances()
-      .reject(ns | ns.shapes.includes(self))
-      .collect(ns | ns.shapes).flatten()
-  in
-  foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
-    .forAll(other |
-      let o: cad::Prism = other.oclAsType(cad::Prism) in
-      let cx1: Real = (self.baseCenter.x + self.apex.x) / 2.0 in
-      let cy1: Real = (self.baseCenter.y + self.apex.y) / 2.0 in
-      let cz1: Real = (self.baseCenter.z + self.apex.z) / 2.0 in
-      let ax1x: Real = self.apex.x - self.baseCenter.x in
-      let ax1y: Real = self.apex.y - self.baseCenter.y in
-      let ax1z: Real = self.apex.z - self.baseCenter.z in
-      let halfH1: Real = (ax1x*ax1x + ax1y*ax1y + ax1z*ax1z) / 4.0 in
-      let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
-      let minX: Real = verts.collect(v | v.x).min() in
-      let maxX: Real = verts.collect(v | v.x).max() in
-      let minY: Real = verts.collect(v | v.y).min() in
-      let maxY: Real = verts.collect(v | v.y).max() in
-      let minZ: Real = verts.collect(v | v.z).min() in
-      let maxZ: Real = verts.collect(v | v.z).max() in
-      let extMaxX: Real = if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
-      let extMinX: Real = if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
-      let extMaxY: Real = if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
-      let extMinY: Real = if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
-      let extMaxZ: Real = if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
-      let extMinZ: Real = if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
-      let pcx: Real = (extMinX + extMaxX) / 2.0 in
-      let pcy: Real = (extMinY + extMaxY) / 2.0 in
-      let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
-      let dx: Real = cx1 - pcx in
-      let dy: Real = cy1 - pcy in
-      let dz: Real = cz1 - pcz in
-      let bound: Real = self.baseRadius + halfH1 +
-                        (extMaxX - extMinX) / 2.0 +
-                        (extMaxY - extMinY) / 2.0 +
-                        (extMaxZ - extMinZ) / 2.0 in
-      dx*dx + dy*dy + dz*dz >= bound * bound
-    )
-""";
+        context cad::Cone inv noIntersectWithPrism:
+          let foreignShapes: Set(Shape) =
+            cad::Namespace.allInstances()
+              .reject(ns | ns.shapes.includes(self))
+              .collect(ns | ns.shapes).flatten()
+          in
+          foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
+            .forAll(other |
+              let o: cad::Prism = other.oclAsType(cad::Prism) in
+              let cx1: Real = (self.baseCenter.x + self.apex.x) / 2.0 in
+              let cy1: Real = (self.baseCenter.y + self.apex.y) / 2.0 in
+              let cz1: Real = (self.baseCenter.z + self.apex.z) / 2.0 in
+              let ax1x: Real = self.apex.x - self.baseCenter.x in
+              let ax1y: Real = self.apex.y - self.baseCenter.y in
+              let ax1z: Real = self.apex.z - self.baseCenter.z in
+              let halfH1: Real = (ax1x*ax1x + ax1y*ax1y + ax1z*ax1z) / 4.0 in
+              let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
+              let minX: Real = verts.collect(v | v.x).min() in
+              let maxX: Real = verts.collect(v | v.x).max() in
+              let minY: Real = verts.collect(v | v.y).min() in
+              let maxY: Real = verts.collect(v | v.y).max() in
+              let minZ: Real = verts.collect(v | v.z).min() in
+              let maxZ: Real = verts.collect(v | v.z).max() in
+              let extMaxX: Real =
+                if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
+              let extMinX: Real =
+                if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
+              let extMaxY: Real =
+                if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
+              let extMinY: Real =
+                if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
+              let extMaxZ: Real =
+                if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
+              let extMinZ: Real =
+                if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
+              let pcx: Real = (extMinX + extMaxX) / 2.0 in
+              let pcy: Real = (extMinY + extMaxY) / 2.0 in
+              let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
+              let dx: Real = cx1 - pcx in
+              let dy: Real = cy1 - pcy in
+              let dz: Real = cz1 - pcz in
+              let bound: Real = self.baseRadius + halfH1 +
+                                (extMaxX - extMinX) / 2.0 +
+                                (extMaxY - extMinY) / 2.0 +
+                                (extMaxZ - extMinZ) / 2.0 in
+              dx*dx + dy*dy + dz*dz >= bound * bound
+            )
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -1133,6 +1199,7 @@ context cad::Cone inv noIntersectWithPrism:
         result.isSatisfied(), "Cones should not intersect with prisms in foreign namespaces");
   }
 
+  /** Tests that cones from different namespaces do not intersect with pyramids. */
   @Test
   public void testConeNoIntersectWithPyramid() throws Exception {
     String constraint =
@@ -1173,6 +1240,7 @@ context cad::Cone inv noIntersectWithPrism:
   // CAD non-intersection constraints: Tube
   // ---------------------------------------------------------------------------
 
+  /** Tests that tubes from different namespaces do not intersect with other tubes. */
   @Test
   public void testTubeNoIntersectWithTube() throws Exception {
     String constraint =
@@ -1203,7 +1271,8 @@ context cad::Cone inv noIntersectWithPrism:
               let dy: Real = cy1 - cy2 in
               let dz: Real = cz1 - cz2 in
               let rSum: Real = self.outerRadius + o.outerRadius in
-              dx*dx + dy*dy + dz*dz >= (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
+              dx*dx + dy*dy + dz*dz >=
+                (rSum + halfH1 + halfH2) * (rSum + halfH1 + halfH2)
             )
         """;
 
@@ -1215,6 +1284,7 @@ context cad::Cone inv noIntersectWithPrism:
     assertTrue(result.isSatisfied(), "Tubes should not intersect with tubes in foreign namespaces");
   }
 
+  /** Tests that tubes from different namespaces do not intersect with boxes. */
   @Test
   public void testTubeNoIntersectWithBox() throws Exception {
     String constraint =
@@ -1268,51 +1338,58 @@ context cad::Cone inv noIntersectWithPrism:
     assertTrue(result.isSatisfied(), "Tubes should not intersect with boxes in foreign namespaces");
   }
 
+  /** Tests that tubes from different namespaces do not intersect with prisms. */
   @Test
   public void testTubeNoIntersectWithPrism() throws Exception {
     String constraint =
         """
-context cad::Tube inv noIntersectWithPrism:
-  let foreignShapes =
-    cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
-      .collect(ns | ns.shapes).flatten()
-  in
-  foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
-    .forAll(other |
-      let o: cad::Prism = other.oclAsType(cad::Prism) in
-      let cx1: Real = (self.bottomCenter.x + self.topCenter.x) / 2.0 in
-      let cy1: Real = (self.bottomCenter.y + self.topCenter.y) / 2.0 in
-      let cz1: Real = (self.bottomCenter.z + self.topCenter.z) / 2.0 in
-      let ax1x: Real = self.topCenter.x - self.bottomCenter.x in
-      let ax1y: Real = self.topCenter.y - self.bottomCenter.y in
-      let ax1z: Real = self.topCenter.z - self.bottomCenter.z in
-      let halfH1: Real = (ax1x*ax1x + ax1y*ax1y + ax1z*ax1z) / 4.0 in
-      let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
-      let minX: Real = verts.collect(v | v.x).min() in
-      let maxX: Real = verts.collect(v | v.x).max() in
-      let minY: Real = verts.collect(v | v.y).min() in
-      let maxY: Real = verts.collect(v | v.y).max() in
-      let minZ: Real = verts.collect(v | v.z).min() in
-      let maxZ: Real = verts.collect(v | v.z).max() in
-      let extMaxX: Real = if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
-      let extMinX: Real = if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
-      let extMaxY: Real = if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
-      let extMinY: Real = if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
-      let extMaxZ: Real = if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
-      let extMinZ: Real = if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
-      let pcx: Real = (extMinX + extMaxX) / 2.0 in
-      let pcy: Real = (extMinY + extMaxY) / 2.0 in
-      let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
-      let dx: Real = cx1 - pcx in
-      let dy: Real = cy1 - pcy in
-      let dz: Real = cz1 - pcz in
-      let bound: Real = self.outerRadius + halfH1 +
-                        (extMaxX - extMinX) / 2.0 +
-                        (extMaxY - extMinY) / 2.0 +
-                        (extMaxZ - extMinZ) / 2.0 in
-      dx*dx + dy*dy + dz*dz >= bound * bound
-    )
-""";
+        context cad::Tube inv noIntersectWithPrism:
+          let foreignShapes =
+            cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
+              .collect(ns | ns.shapes).flatten()
+          in
+          foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
+            .forAll(other |
+              let o: cad::Prism = other.oclAsType(cad::Prism) in
+              let cx1: Real = (self.bottomCenter.x + self.topCenter.x) / 2.0 in
+              let cy1: Real = (self.bottomCenter.y + self.topCenter.y) / 2.0 in
+              let cz1: Real = (self.bottomCenter.z + self.topCenter.z) / 2.0 in
+              let ax1x: Real = self.topCenter.x - self.bottomCenter.x in
+              let ax1y: Real = self.topCenter.y - self.bottomCenter.y in
+              let ax1z: Real = self.topCenter.z - self.bottomCenter.z in
+              let halfH1: Real = (ax1x*ax1x + ax1y*ax1y + ax1z*ax1z) / 4.0 in
+              let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
+              let minX: Real = verts.collect(v | v.x).min() in
+              let maxX: Real = verts.collect(v | v.x).max() in
+              let minY: Real = verts.collect(v | v.y).min() in
+              let maxY: Real = verts.collect(v | v.y).max() in
+              let minZ: Real = verts.collect(v | v.z).min() in
+              let maxZ: Real = verts.collect(v | v.z).max() in
+              let extMaxX: Real =
+                if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
+              let extMinX: Real =
+                if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
+              let extMaxY: Real =
+                if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
+              let extMinY: Real =
+                if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
+              let extMaxZ: Real =
+                if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
+              let extMinZ: Real =
+                if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
+              let pcx: Real = (extMinX + extMaxX) / 2.0 in
+              let pcy: Real = (extMinY + extMaxY) / 2.0 in
+              let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
+              let dx: Real = cx1 - pcx in
+              let dy: Real = cy1 - pcy in
+              let dz: Real = cz1 - pcz in
+              let bound: Real = self.outerRadius + halfH1 +
+                                (extMaxX - extMinX) / 2.0 +
+                                (extMaxY - extMinY) / 2.0 +
+                                (extMaxZ - extMinZ) / 2.0 in
+              dx*dx + dy*dy + dz*dz >= bound * bound
+            )
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -1323,6 +1400,7 @@ context cad::Tube inv noIntersectWithPrism:
         result.isSatisfied(), "Tubes should not intersect with prisms in foreign namespaces");
   }
 
+  /** Tests that tubes from different namespaces do not intersect with pyramids. */
   @Test
   public void testTubeNoIntersectWithPyramid() throws Exception {
     String constraint =
@@ -1363,6 +1441,7 @@ context cad::Tube inv noIntersectWithPrism:
   // CAD non-intersection constraints: Box
   // ---------------------------------------------------------------------------
 
+  /** Tests that boxes from different namespaces do not intersect with other boxes. */
   @Test
   public void testBoxNoIntersectWithBox() throws Exception {
     String constraint =
@@ -1427,62 +1506,69 @@ context cad::Tube inv noIntersectWithPrism:
     assertTrue(result.isSatisfied(), "Boxes should not intersect with boxes in foreign namespaces");
   }
 
+  /** Tests that boxes from different namespaces do not intersect with prisms. */
   @Test
   public void testBoxNoIntersectWithPrism() throws Exception {
     String constraint =
         """
-context cad::Box inv noIntersectWithPrism:
-  let foreignShapes =
-    cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
-      .collect(ns | ns.shapes).flatten()
-  in
-  foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
-    .forAll(other |
-      let o: cad::Prism = other.oclAsType(cad::Prism) in
-      let cx1: Real = self.origin.x + self.edgeVectorA.x/2.0
-                                    + self.edgeVectorB.x/2.0
-                                    + self.edgeVectorC.x/2.0 in
-      let cy1: Real = self.origin.y + self.edgeVectorA.y/2.0
-                                    + self.edgeVectorB.y/2.0
-                                    + self.edgeVectorC.y/2.0 in
-      let cz1: Real = self.origin.z + self.edgeVectorA.z/2.0
-                                    + self.edgeVectorB.z/2.0
-                                    + self.edgeVectorC.z/2.0 in
-      let half1W: Real = (self.edgeVectorA.x*self.edgeVectorA.x +
-                          self.edgeVectorA.y*self.edgeVectorA.y +
-                          self.edgeVectorA.z*self.edgeVectorA.z) / 2.0 in
-      let half1H: Real = (self.edgeVectorB.x*self.edgeVectorB.x +
-                          self.edgeVectorB.y*self.edgeVectorB.y +
-                          self.edgeVectorB.z*self.edgeVectorB.z) / 2.0 in
-      let half1D: Real = (self.edgeVectorC.x*self.edgeVectorC.x +
-                          self.edgeVectorC.y*self.edgeVectorC.y +
-                          self.edgeVectorC.z*self.edgeVectorC.z) / 2.0 in
-      let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
-      let minX: Real = verts.collect(v | v.x).min() in
-      let maxX: Real = verts.collect(v | v.x).max() in
-      let minY: Real = verts.collect(v | v.y).min() in
-      let maxY: Real = verts.collect(v | v.y).max() in
-      let minZ: Real = verts.collect(v | v.z).min() in
-      let maxZ: Real = verts.collect(v | v.z).max() in
-      let extMaxX: Real = if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
-      let extMinX: Real = if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
-      let extMaxY: Real = if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
-      let extMinY: Real = if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
-      let extMaxZ: Real = if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
-      let extMinZ: Real = if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
-      let pcx: Real = (extMinX + extMaxX) / 2.0 in
-      let pcy: Real = (extMinY + extMaxY) / 2.0 in
-      let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
-      let dx: Real = cx1 - pcx in
-      let dy: Real = cy1 - pcy in
-      let dz: Real = cz1 - pcz in
-      let bound: Real = half1W + half1H + half1D +
-                        (extMaxX - extMinX) / 2.0 +
-                        (extMaxY - extMinY) / 2.0 +
-                        (extMaxZ - extMinZ) / 2.0 in
-      dx*dx + dy*dy + dz*dz >= bound * bound
-    )
-""";
+        context cad::Box inv noIntersectWithPrism:
+          let foreignShapes =
+            cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
+              .collect(ns | ns.shapes).flatten()
+          in
+          foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
+            .forAll(other |
+              let o: cad::Prism = other.oclAsType(cad::Prism) in
+              let cx1: Real = self.origin.x + self.edgeVectorA.x/2.0
+                                            + self.edgeVectorB.x/2.0
+                                            + self.edgeVectorC.x/2.0 in
+              let cy1: Real = self.origin.y + self.edgeVectorA.y/2.0
+                                            + self.edgeVectorB.y/2.0
+                                            + self.edgeVectorC.y/2.0 in
+              let cz1: Real = self.origin.z + self.edgeVectorA.z/2.0
+                                            + self.edgeVectorC.z/2.0
+                                            + self.edgeVectorC.z/2.0 in
+              let half1W: Real = (self.edgeVectorA.x*self.edgeVectorA.x +
+                                  self.edgeVectorA.y*self.edgeVectorA.y +
+                                  self.edgeVectorA.z*self.edgeVectorA.z) / 2.0 in
+              let half1H: Real = (self.edgeVectorB.x*self.edgeVectorB.x +
+                                  self.edgeVectorB.y*self.edgeVectorB.y +
+                                  self.edgeVectorB.z*self.edgeVectorB.z) / 2.0 in
+              let half1D: Real = (self.edgeVectorC.x*self.edgeVectorC.x +
+                                  self.edgeVectorC.y*self.edgeVectorC.y +
+                                  self.edgeVectorC.z*self.edgeVectorC.z) / 2.0 in
+              let verts: OrderedSet(Coordinate) = o.baseProfile.vertices in
+              let minX: Real = verts.collect(v | v.x).min() in
+              let maxX: Real = verts.collect(v | v.x).max() in
+              let minY: Real = verts.collect(v | v.y).min() in
+              let maxY: Real = verts.collect(v | v.y).max() in
+              let minZ: Real = verts.collect(v | v.z).min() in
+              let maxZ: Real = verts.collect(v | v.z).max() in
+              let extMaxX: Real =
+                if o.extrusion.x > 0.0 then maxX + o.extrusion.x else maxX endif in
+              let extMinX: Real =
+                if o.extrusion.x < 0.0 then minX + o.extrusion.x else minX endif in
+              let extMaxY: Real =
+                if o.extrusion.y > 0.0 then maxY + o.extrusion.y else maxY endif in
+              let extMinY: Real =
+                if o.extrusion.y < 0.0 then minY + o.extrusion.y else minY endif in
+              let extMaxZ: Real =
+                if o.extrusion.z > 0.0 then maxZ + o.extrusion.z else maxZ endif in
+              let extMinZ: Real =
+                if o.extrusion.z < 0.0 then minZ + o.extrusion.z else minZ endif in
+              let pcx: Real = (extMinX + extMaxX) / 2.0 in
+              let pcy: Real = (extMinY + extMaxY) / 2.0 in
+              let pcz: Real = (extMinZ + extMaxZ) / 2.0 in
+              let dx: Real = cx1 - pcx in
+              let dy: Real = cy1 - pcy in
+              let dz: Real = cz1 - pcz in
+              let bound: Real = half1W + half1H + half1D +
+                                (extMaxX - extMinX) / 2.0 +
+                                (extMaxY - extMinY) / 2.0 +
+                                (extMaxZ - extMinZ) / 2.0 in
+              dx*dx + dy*dy + dz*dz >= bound * bound
+            )
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -1493,6 +1579,7 @@ context cad::Box inv noIntersectWithPrism:
         result.isSatisfied(), "Boxes should not intersect with prisms in foreign namespaces");
   }
 
+  /** Tests that boxes from different namespaces do not intersect with pyramids. */
   @Test
   public void testBoxNoIntersectWithPyramid() throws Exception {
     String constraint =
@@ -1544,58 +1631,73 @@ context cad::Box inv noIntersectWithPrism:
   // CAD non-intersection constraints: Prism
   // ---------------------------------------------------------------------------
 
+  /** Tests that prisms from different namespaces do not intersect with other prisms. */
   @Test
   public void testPrismNoIntersectWithPrism() throws Exception {
     String constraint =
         """
-context cad::Prism inv noIntersectWithPrism:
-  let foreignShapes =
-    cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
-      .collect(ns | ns.shapes).flatten()
-  in
-  foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
-    .forAll(other |
-      let o: cad::Prism = other.oclAsType(cad::Prism) in
-      let v1: OrderedSet(Coordinate) = self.baseProfile.vertices in
-      let minX1: Real = v1.collect(v | v.x).min() in
-      let maxX1: Real = v1.collect(v | v.x).max() in
-      let minY1: Real = v1.collect(v | v.y).min() in
-      let maxY1: Real = v1.collect(v | v.y).max() in
-      let minZ1: Real = v1.collect(v | v.z).min() in
-      let maxZ1: Real = v1.collect(v | v.z).max() in
-      let eMaxX1: Real = if self.extrusion.x > 0.0 then maxX1 + self.extrusion.x else maxX1 endif in
-      let eMinX1: Real = if self.extrusion.x < 0.0 then minX1 + self.extrusion.x else minX1 endif in
-      let eMaxY1: Real = if self.extrusion.y > 0.0 then maxY1 + self.extrusion.y else maxY1 endif in
-      let eMinY1: Real = if self.extrusion.y < 0.0 then minY1 + self.extrusion.y else minY1 endif in
-      let eMaxZ1: Real = if self.extrusion.z > 0.0 then maxZ1 + self.extrusion.z else maxZ1 endif in
-      let eMinZ1: Real = if self.extrusion.z < 0.0 then minZ1 + self.extrusion.z else minZ1 endif in
-      let cx1: Real = (eMinX1 + eMaxX1) / 2.0 in
-      let cy1: Real = (eMinY1 + eMaxY1) / 2.0 in
-      let cz1: Real = (eMinZ1 + eMaxZ1) / 2.0 in
-      let v2: OrderedSet(Coordinate) = o.baseProfile.vertices in
-      let minX2: Real = v2.collect(v | v.x).min() in
-      let maxX2: Real = v2.collect(v | v.x).max() in
-      let minY2: Real = v2.collect(v | v.y).min() in
-      let maxY2: Real = v2.collect(v | v.y).max() in
-      let minZ2: Real = v2.collect(v | v.z).min() in
-      let maxZ2: Real = v2.collect(v | v.z).max() in
-      let eMaxX2: Real = if o.extrusion.x > 0.0 then maxX2 + o.extrusion.x else maxX2 endif in
-      let eMinX2: Real = if o.extrusion.x < 0.0 then minX2 + o.extrusion.x else minX2 endif in
-      let eMaxY2: Real = if o.extrusion.y > 0.0 then maxY2 + o.extrusion.y else maxY2 endif in
-      let eMinY2: Real = if o.extrusion.y < 0.0 then minY2 + o.extrusion.y else minY2 endif in
-      let eMaxZ2: Real = if o.extrusion.z > 0.0 then maxZ2 + o.extrusion.z else maxZ2 endif in
-      let eMinZ2: Real = if o.extrusion.z < 0.0 then minZ2 + o.extrusion.z else minZ2 endif in
-      let cx2: Real = (eMinX2 + eMaxX2) / 2.0 in
-      let cy2: Real = (eMinY2 + eMaxY2) / 2.0 in
-      let cz2: Real = (eMinZ2 + eMaxZ2) / 2.0 in
-      let dx: Real = cx1 - cx2 in
-      let dy: Real = cy1 - cy2 in
-      let dz: Real = cz1 - cz2 in
-      let bound: Real = (eMaxX1 - eMinX1) / 2.0 + (eMaxY1 - eMinY1) / 2.0 + (eMaxZ1 - eMinZ1) / 2.0 +
-                        (eMaxX2 - eMinX2) / 2.0 + (eMaxY2 - eMinY2) / 2.0 + (eMaxZ2 - eMinZ2) / 2.0 in
-      dx*dx + dy*dy + dz*dz >= bound * bound
-    )
-""";
+        context cad::Prism inv noIntersectWithPrism:
+          let foreignShapes =
+            cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
+              .collect(ns | ns.shapes).flatten()
+          in
+          foreignShapes.select(s | s.oclIsTypeOf(cad::Prism))
+            .forAll(other |
+              let o: cad::Prism = other.oclAsType(cad::Prism) in
+              let v1: OrderedSet(Coordinate) = self.baseProfile.vertices in
+              let minX1: Real = v1.collect(v | v.x).min() in
+              let maxX1: Real = v1.collect(v | v.x).max() in
+              let minY1: Real = v1.collect(v | v.y).min() in
+              let maxY1: Real = v1.collect(v | v.y).max() in
+              let minZ1: Real = v1.collect(v | v.z).min() in
+              let maxZ1: Real = v1.collect(v | v.z).max() in
+              let eMaxX1: Real =
+                if self.extrusion.x > 0.0 then maxX1 + self.extrusion.x else maxX1 endif in
+              let eMinX1: Real =
+                if self.extrusion.x < 0.0 then minX1 + self.extrusion.x else minX1 endif in
+              let eMaxY1: Real =
+                if self.extrusion.y > 0.0 then maxY1 + self.extrusion.y else maxY1 endif in
+              let eMinY1: Real =
+                if self.extrusion.y < 0.0 then minY1 + self.extrusion.y else minY1 endif in
+              let eMaxZ1: Real =
+                if self.extrusion.z > 0.0 then maxZ1 + self.extrusion.z else maxZ1 endif in
+              let eMinZ1: Real =
+                if self.extrusion.z < 0.0 then minZ1 + self.extrusion.z else minZ1 endif in
+              let cx1: Real = (eMinX1 + eMaxX1) / 2.0 in
+              let cy1: Real = (eMinY1 + eMaxY1) / 2.0 in
+              let cz1: Real = (eMinZ1 + eMaxZ1) / 2.0 in
+              let v2: OrderedSet(Coordinate) = o.baseProfile.vertices in
+              let minX2: Real = v2.collect(v | v.x).min() in
+              let maxX2: Real = v2.collect(v | v.x).max() in
+              let minY2: Real = v2.collect(v | v.y).min() in
+              let maxY2: Real = v2.collect(v | v.y).max() in
+              let minZ2: Real = v2.collect(v | v.z).min() in
+              let maxZ2: Real = v2.collect(v | v.z).max() in
+              let eMaxX2: Real =
+                if o.extrusion.x > 0.0 then maxX2 + o.extrusion.x else maxX2 endif in
+              let eMinX2: Real =
+                if o.extrusion.x < 0.0 then minX2 + o.extrusion.x else minX2 endif in
+              let eMaxY2: Real =
+                if o.extrusion.y > 0.0 then maxY2 + o.extrusion.y else maxY2 endif in
+              let eMinY2: Real =
+                if o.extrusion.y < 0.0 then minY2 + o.extrusion.y else minY2 endif in
+              let eMaxZ2: Real =
+                if o.extrusion.z > 0.0 then maxZ2 + o.extrusion.z else maxZ2 endif in
+              let eMinZ2: Real =
+                if o.extrusion.z < 0.0 then minZ2 + o.extrusion.z else minZ2 endif in
+              let cx2: Real = (eMinX2 + eMaxX2) / 2.0 in
+              let cy2: Real = (eMinY2 + eMaxY2) / 2.0 in
+              let cz2: Real = (eMinZ2 + eMaxZ2) / 2.0 in
+              let dx: Real = cx1 - cx2 in
+              let dy: Real = cy1 - cy2 in
+              let dz: Real = cz1 - cz2 in
+              let bound: Real =
+                (eMaxX1 - eMinX1) / 2.0 + (eMaxY1 - eMinY1) / 2.0 +
+                (eMaxZ1 - eMinZ1) / 2.0 + (eMaxX2 - eMinX2) / 2.0 +
+                (eMaxY2 - eMinY2) / 2.0 + (eMaxZ2 - eMinZ2) / 2.0 in
+              dx*dx + dy*dy + dz*dz >= bound * bound
+            )
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -1606,43 +1708,51 @@ context cad::Prism inv noIntersectWithPrism:
         result.isSatisfied(), "Prisms should not intersect with prisms in foreign namespaces");
   }
 
+  /** Tests that prisms from different namespaces do not intersect with pyramids. */
   @Test
   public void testPrismNoIntersectWithPyramid() throws Exception {
     String constraint =
         """
-context cad::Prism inv noIntersectWithPyramid:
-  let foreignShapes =
-    cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
-      .collect(ns | ns.shapes).flatten()
-  in
-  foreignShapes.select(s | s.oclIsTypeOf(cad::Pyramid))
-    .forAll(other |
-      let o: cad::Pyramid = other.oclAsType(cad::Pyramid) in
-      let v1: OrderedSet(Coordinate) = self.baseProfile.vertices in
-      let minX1: Real = v1.collect(v | v.x).min() in
-      let maxX1: Real = v1.collect(v | v.x).max() in
-      let minY1: Real = v1.collect(v | v.y).min() in
-      let maxY1: Real = v1.collect(v | v.y).max() in
-      let minZ1: Real = v1.collect(v | v.z).min() in
-      let maxZ1: Real = v1.collect(v | v.z).max() in
-      let eMaxX1: Real = if self.extrusion.x > 0.0 then maxX1 + self.extrusion.x else maxX1 endif in
-      let eMinX1: Real = if self.extrusion.x < 0.0 then minX1 + self.extrusion.x else minX1 endif in
-      let eMaxY1: Real = if self.extrusion.y > 0.0 then maxY1 + self.extrusion.y else maxY1 endif in
-      let eMinY1: Real = if self.extrusion.y < 0.0 then minY1 + self.extrusion.y else minY1 endif in
-      let eMaxZ1: Real = if self.extrusion.z > 0.0 then maxZ1 + self.extrusion.z else maxZ1 endif in
-      let eMinZ1: Real = if self.extrusion.z < 0.0 then minZ1 + self.extrusion.z else minZ1 endif in
-      let cx1: Real = (eMinX1 + eMaxX1) / 2.0 in
-      let cy1: Real = (eMinY1 + eMaxY1) / 2.0 in
-      let cz1: Real = (eMinZ1 + eMaxZ1) / 2.0 in
-      let dx: Real = cx1 - o.apex.x in
-      let dy: Real = cy1 - o.apex.y in
-      let dz: Real = cz1 - o.apex.z in
-      let bound: Real = (eMaxX1 - eMinX1) / 2.0 +
-                        (eMaxY1 - eMinY1) / 2.0 +
-                        (eMaxZ1 - eMinZ1) / 2.0 in
-      dx*dx + dy*dy + dz*dz >= bound * bound
-    )
-""";
+        context cad::Prism inv noIntersectWithPyramid:
+          let foreignShapes =
+            cad::Namespace.allInstances().reject(ns | ns.shapes.includes(self))
+              .collect(ns | ns.shapes).flatten()
+          in
+          foreignShapes.select(s | s.oclIsTypeOf(cad::Pyramid))
+            .forAll(other |
+              let o: cad::Pyramid = other.oclAsType(cad::Pyramid) in
+              let v1: OrderedSet(Coordinate) = self.baseProfile.vertices in
+              let minX1: Real = v1.collect(v | v.x).min() in
+              let maxX1: Real = v1.collect(v | v.x).max() in
+              let minY1: Real = v1.collect(v | v.y).min() in
+              let maxY1: Real = v1.collect(v | v.y).max() in
+              let minZ1: Real = v1.collect(v | v.z).min() in
+              let maxZ1: Real = v1.collect(v | v.z).max() in
+              let eMaxX1: Real =
+                if self.extrusion.x > 0.0 then maxX1 + self.extrusion.x else maxX1 endif in
+              let eMinX1: Real =
+                if self.extrusion.x < 0.0 then minX1 + self.extrusion.x else minX1 endif in
+              let eMaxY1: Real =
+                if self.extrusion.y > 0.0 then maxY1 + self.extrusion.y else maxY1 endif in
+              let eMinY1: Real =
+                if self.extrusion.y < 0.0 then minY1 + self.extrusion.y else minY1 endif in
+              let eMaxZ1: Real =
+                if self.extrusion.z > 0.0 then maxZ1 + self.extrusion.z else maxZ1 endif in
+              let eMinZ1: Real =
+                if self.extrusion.z < 0.0 then minZ1 + self.extrusion.z else minZ1 endif in
+              let cx1: Real = (eMinX1 + eMaxX1) / 2.0 in
+              let cy1: Real = (eMinY1 + eMaxY1) / 2.0 in
+              let cz1: Real = (eMinZ1 + eMaxZ1) / 2.0 in
+              let dx: Real = cx1 - o.apex.x in
+              let dy: Real = cy1 - o.apex.y in
+              let dz: Real = cz1 - o.apex.z in
+              let bound: Real =
+                (eMaxX1 - eMinX1) / 2.0 +
+                (eMaxY1 - eMinY1) / 2.0 +
+                (eMaxZ1 - eMinZ1) / 2.0 in
+              dx*dx + dy*dy + dz*dz >= bound * bound
+            )
+        """;
 
     ConstraintResult result =
         MultiModelOCLInterface.evaluateConstraint(
@@ -1657,6 +1767,7 @@ context cad::Prism inv noIntersectWithPyramid:
   // CAD non-intersection constraints: Pyramid
   // ---------------------------------------------------------------------------
 
+  /** Tests that pyramids from different namespaces do not share the same apex point. */
   @Test
   public void testPyramidNoIntersectWithPyramid() throws Exception {
     String constraint =
