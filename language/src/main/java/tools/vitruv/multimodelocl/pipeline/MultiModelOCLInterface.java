@@ -110,14 +110,20 @@ public class MultiModelOCLInterface {
     Value result = compiler.compile(constraint);
 
     if (result == null) {
+      // result is null when the parser, symbol table, or type checker encountered errors.
+      // Prefer the actual errors from the compiler over the generic catch-all message.
+      List<CompileError> passErrors =
+          compiler.hasErrors() ? compiler.getErrors().getErrors() : List.of();
+
+      if (passErrors.isEmpty()) {
+        // Truly unknown — fall back to generic syntax error message
+        passErrors =
+            List.of(
+                new CompileError(
+                    1, 0, "Syntax error in constraint", ErrorSeverity.ERROR, constraint));
+      }
       return new ConstraintResult(
-          constraint,
-          false,
-          List.of(
-              new CompileError(
-                  1, 0, "Syntax error in constraint", ErrorSeverity.ERROR, constraint)),
-          loadResult.fileErrors,
-          loadResult.warnings);
+          constraint, false, passErrors, loadResult.fileErrors, loadResult.warnings);
     }
 
     List<CompileError> compilerErrors =

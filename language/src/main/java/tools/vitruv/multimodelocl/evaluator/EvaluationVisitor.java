@@ -23,6 +23,7 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.ParseTreeProperty;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.eclipse.emf.ecore.EClass;
+import org.eclipse.emf.ecore.EEnumLiteral;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EStructuralFeature;
 import tools.vitruv.multimodelocl.OCLBaseVisitor;
@@ -458,7 +459,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   public Value visitIncludesOp(OCLParser.IncludesOpContext ctx) {
     Value receiver = receiverStack.peek();
     Value arg = visit(ctx.arg);
-    if (arg.size() != 1) return error("includes() requires singleton", ctx);
+    if (arg.size() != 1) {
+      return error("includes() requires singleton", ctx);
+    }
 
     OCLElement searchElem = arg.getElements().get(0);
     boolean result = receiver.includes(searchElem);
@@ -480,7 +483,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   public Value visitIncludingOp(OCLParser.IncludingOpContext ctx) {
     Value receiver = receiverStack.peek();
     Value arg = visit(ctx.arg);
-    if (arg.size() != 1) return error("including() requires singleton", ctx);
+    if (arg.size() != 1) {
+      return error("including() requires singleton", ctx);
+    }
     return receiver.including(arg.getElements().get(0));
   }
 
@@ -498,7 +503,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   public Value visitExcludingOp(OCLParser.ExcludingOpContext ctx) {
     Value receiver = receiverStack.peek();
     Value arg = visit(ctx.arg);
-    if (arg.size() != 1) return error("excluding() requires singleton", ctx);
+    if (arg.size() != 1) {
+      return error("excluding() requires singleton", ctx);
+    }
     return receiver.excluding(arg.getElements().get(0));
   }
 
@@ -516,7 +523,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   public Value visitExcludesOp(OCLParser.ExcludesOpContext ctx) {
     Value receiver = receiverStack.peek();
     Value arg = visit(ctx.arg);
-    if (arg.size() != 1) return error("excludes() requires singleton", ctx);
+    if (arg.size() != 1) {
+      return error("excludes() requires singleton", ctx);
+    }
     return Value.boolValue(receiver.excludes(arg.getElements().get(0)));
   }
 
@@ -610,7 +619,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   @Override
   public Value visitMaxOp(OCLParser.MaxOpContext ctx) {
     Value receiver = receiverStack.peek();
-    if (receiver.isEmpty()) return Value.empty(Type.INTEGER);
+    if (receiver.isEmpty()) {
+      return Value.empty(Type.INTEGER);
+    }
     int max = Integer.MIN_VALUE;
     for (OCLElement elem : receiver.getElements()) {
       Integer val = elem.tryGetInt();
@@ -635,7 +646,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   @Override
   public Value visitMinOp(OCLParser.MinOpContext ctx) {
     Value receiver = receiverStack.peek();
-    if (receiver.isEmpty()) return Value.empty(Type.INTEGER);
+    if (receiver.isEmpty()) {
+      return Value.empty(Type.INTEGER);
+    }
     int min = Integer.MAX_VALUE;
     for (OCLElement elem : receiver.getElements()) {
       Integer val = elem.tryGetInt();
@@ -660,7 +673,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   @Override
   public Value visitAvgOp(OCLParser.AvgOpContext ctx) {
     Value receiver = receiverStack.peek();
-    if (receiver.isEmpty()) return Value.empty(Type.INTEGER);
+    if (receiver.isEmpty()) {
+      return Value.empty(Type.INTEGER);
+    }
     int sum = 0;
     for (OCLElement elem : receiver.getElements()) {
       Integer value = elem.tryGetInt();
@@ -978,122 +993,6 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates select operation with a single iterator variable.
-   *
-   * <p>Implements OCL select semantics: filters collection by predicate, returning elements where
-   * predicate evaluates to true.
-   *
-   * <p>Creates a fresh local scope, binds each element to the iterator variable, evaluates the
-   * predicate, and collects matching elements. The predicate must return singleton Boolean for each
-   * iteration.
-   *
-   * @param ctx Parser context for select operation
-   * @param receiver Collection to filter
-   * @param iterVar Name of iterator variable to bind
-   * @return Collection of elements satisfying the predicate, or error Value if predicate returns
-   *     non-Boolean or non-singleton
-   */
-  private Value evaluateSelectSingleVar(
-      OCLParser.SelectOpContext ctx, Value receiver, String iterVar) {
-    Type elemType = receiver.getRuntimeType().getElementType();
-    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
-    symbolTable.enterScope(iterScope);
-
-    try {
-      List<OCLElement> results = new ArrayList<>();
-      for (OCLElement elem : receiver.getElements()) {
-        // Bind current element to iterator variable
-        VariableSymbol iterSymbol = new VariableSymbol(iterVar, elemType, iterScope, true);
-        iterSymbol.setValue(new Value(List.of(elem), elemType));
-        symbolTable.defineVariable(iterSymbol);
-
-        // Evaluate predicate with current binding
-        Value bodyResult = visit(ctx.body);
-        if (bodyResult.size() != 1) {
-          return error("select predicate must return singleton Boolean", ctx);
-        }
-
-        Boolean condition = bodyResult.getElements().get(0).tryGetBool();
-        if (condition == null) {
-          return error("select predicate must return Boolean", ctx);
-        }
-
-        // Collect elements where predicate is true
-        if (condition) {
-          results.add(elem);
-        }
-      }
-      return Value.of(results, receiver.getRuntimeType());
-    } finally {
-      symbolTable.exitScope();
-    }
-  }
-
-  /**
-   * Evaluates select operation with two iterator variables (Cartesian product).
-   *
-   * <p>Implements OCL two-variable select: iterates over all pairs (e1, e2) from the receiver
-   * collection, evaluates predicate with both variables bound, and collects pairs where predicate
-   * is true.
-   *
-   * <p>Creates nested iteration over the collection, binding both iterator variables for each pair.
-   * Results are flattened into a single collection containing all elements from matching pairs.
-   *
-   * @param ctx Parser context for select operation
-   * @param receiver Collection to iterate over
-   * @param var1 Name of first iterator variable
-   * @param var2 Name of second iterator variable
-   * @return Collection containing both elements of each matching pair, or error Value if predicate
-   *     returns non-Boolean or non-singleton
-   */
-  private Value evaluateSelectTwoVars(
-      OCLParser.SelectOpContext ctx, Value receiver, String var1, String var2) {
-    Type elemType = receiver.getRuntimeType().getElementType();
-    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
-    symbolTable.enterScope(iterScope);
-
-    try {
-      List<OCLElement> results = new ArrayList<>();
-      List<OCLElement> elements = receiver.getElements();
-
-      // Nested iteration: for each pair (e1, e2)
-      for (OCLElement elem1 : elements) {
-        for (OCLElement elem2 : elements) {
-          // Bind both iterator variables
-          VariableSymbol var1Symbol = new VariableSymbol(var1, elemType, iterScope, true);
-          var1Symbol.setValue(new Value(List.of(elem1), elemType));
-          symbolTable.defineVariable(var1Symbol);
-
-          VariableSymbol var2Symbol = new VariableSymbol(var2, elemType, iterScope, true);
-          var2Symbol.setValue(new Value(List.of(elem2), elemType));
-          symbolTable.defineVariable(var2Symbol);
-
-          // Evaluate predicate
-          Value bodyResult = visit(ctx.body);
-          if (bodyResult.size() != 1) {
-            return error("select predicate must return singleton Boolean", ctx);
-          }
-
-          Boolean condition = bodyResult.getElements().get(0).tryGetBool();
-          if (condition == null) {
-            return error("select predicate must return Boolean", ctx);
-          }
-
-          // Add pair if predicate is true
-          if (condition) {
-            // Return both elements (could create tuple, or just first element)
-            results.add(elem1);
-            results.add(elem2);
-          }
-        }
-      }
-      return Value.of(results, receiver.getRuntimeType());
-    } finally {
-      symbolTable.exitScope();
-    }
-  }
-
-  /**
    * Evaluates the {@code reject()} iterator operation.
    *
    * <p>Filters the collection, keeping only elements that do NOT satisfy the predicate.
@@ -1131,120 +1030,6 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates reject operation with a single iterator variable.
-   *
-   * <p>Implements OCL reject semantics: filters collection by negated predicate, returning elements
-   * where predicate evaluates to false. Inverse of select.
-   *
-   * <p>Creates a fresh local scope, binds each element to the iterator variable, evaluates the
-   * predicate, and collects non-matching elements. The predicate must return singleton Boolean for
-   * each iteration.
-   *
-   * @param ctx Parser context for reject operation
-   * @param receiver Collection to filter
-   * @param iterVar Name of iterator variable to bind
-   * @return Collection of elements NOT satisfying the predicate, or error Value if predicate
-   *     returns non-Boolean or non-singleton
-   */
-  private Value evaluateRejectSingleVar(
-      OCLParser.RejectOpContext ctx, Value receiver, String iterVar) {
-    Type elemType = receiver.getRuntimeType().getElementType();
-    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
-    symbolTable.enterScope(iterScope);
-
-    try {
-      List<OCLElement> results = new ArrayList<>();
-      for (OCLElement elem : receiver.getElements()) {
-        // Bind current element to iterator variable
-        VariableSymbol iterSymbol = new VariableSymbol(iterVar, elemType, iterScope, true);
-        iterSymbol.setValue(new Value(List.of(elem), elemType));
-        symbolTable.defineVariable(iterSymbol);
-
-        // Evaluate predicate with current binding
-        Value bodyResult = visit(ctx.body);
-        if (bodyResult.size() != 1) {
-          return error("reject predicate must return singleton Boolean", ctx);
-        }
-
-        Boolean condition = bodyResult.getElements().get(0).tryGetBool();
-        if (condition == null) {
-          return error("reject predicate must return Boolean", ctx);
-        }
-
-        // Collect elements where predicate is false
-        if (!condition) {
-          results.add(elem);
-        }
-      }
-      return Value.of(results, receiver.getRuntimeType());
-    } finally {
-      symbolTable.exitScope();
-    }
-  }
-
-  /**
-   * Evaluates reject operation with two iterator variables (Cartesian product).
-   *
-   * <p>Implements OCL two-variable reject: iterates over all pairs (e1, e2) from the receiver
-   * collection, evaluates predicate with both variables bound, and collects pairs where predicate
-   * is false. Inverse of two-variable select.
-   *
-   * <p>Creates nested iteration over the collection, binding both iterator variables for each pair.
-   * Results are flattened into a single collection containing all elements from non-matching pairs.
-   *
-   * @param ctx Parser context for reject operation
-   * @param receiver Collection to iterate over
-   * @param var1 Name of first iterator variable
-   * @param var2 Name of second iterator variable
-   * @return Collection containing both elements of each non-matching pair, or error Value if
-   *     predicate returns non-Boolean or non-singleton
-   */
-  private Value evaluateRejectTwoVars(
-      OCLParser.RejectOpContext ctx, Value receiver, String var1, String var2) {
-    Type elemType = receiver.getRuntimeType().getElementType();
-    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
-    symbolTable.enterScope(iterScope);
-
-    try {
-      List<OCLElement> results = new ArrayList<>();
-      List<OCLElement> elements = receiver.getElements();
-
-      for (OCLElement elem1 : elements) {
-        for (OCLElement elem2 : elements) {
-          // Bind both iterator variables
-          VariableSymbol var1Symbol = new VariableSymbol(var1, elemType, iterScope, true);
-          var1Symbol.setValue(new Value(List.of(elem1), elemType));
-          symbolTable.defineVariable(var1Symbol);
-
-          VariableSymbol var2Symbol = new VariableSymbol(var2, elemType, iterScope, true);
-          var2Symbol.setValue(new Value(List.of(elem2), elemType));
-          symbolTable.defineVariable(var2Symbol);
-
-          // Evaluate predicate
-          Value bodyResult = visit(ctx.body);
-          if (bodyResult.size() != 1) {
-            return error("reject predicate must return singleton Boolean", ctx);
-          }
-
-          Boolean condition = bodyResult.getElements().get(0).tryGetBool();
-          if (condition == null) {
-            return error("reject predicate must return Boolean", ctx);
-          }
-
-          // Add pair if predicate is FALSE
-          if (!condition) {
-            results.add(elem1);
-            results.add(elem2);
-          }
-        }
-      }
-      return Value.of(results, receiver.getRuntimeType());
-    } finally {
-      symbolTable.exitScope();
-    }
-  }
-
-  /**
    * Evaluates the {@code collect()} iterator operation.
    *
    * <p>Transforms each element in the collection using the provided expression.
@@ -1279,98 +1064,6 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     }
 
     return error("collect supports at most 2 iterator variables", ctx);
-  }
-
-  /**
-   * Evaluates collect operation with a single iterator variable.
-   *
-   * <p>Implements OCL collect semantics: transforms each element by applying the body expression,
-   * then flattens all results into a single collection. Unlike select/reject, the body can return
-   * any type (not just Boolean).
-   *
-   * <p>Creates a fresh local scope, binds each element to the iterator variable, evaluates the
-   * transformation expression, and aggregates all resulting elements into a flat collection.
-   *
-   * @param ctx Parser context for collect operation
-   * @param receiver Collection to transform
-   * @param iterVar Name of iterator variable to bind
-   * @return Flattened collection of all transformation results, typed according to type checker's
-   *     analysis or Set(Any) as fallback
-   */
-  private Value evaluateCollectSingleVar(
-      OCLParser.CollectOpContext ctx, Value receiver, String iterVar) {
-    Type elemType = receiver.getRuntimeType().getElementType();
-    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
-    symbolTable.enterScope(iterScope);
-
-    try {
-      List<OCLElement> results = new ArrayList<>();
-      for (OCLElement elem : receiver.getElements()) {
-        // Bind current element to iterator variable
-        VariableSymbol iterSymbol = new VariableSymbol(iterVar, elemType, iterScope, true);
-        iterSymbol.setValue(new Value(List.of(elem), elemType));
-        symbolTable.defineVariable(iterSymbol);
-
-        // Evaluate transformation expression and flatten into results
-        Value bodyResult = visit(ctx.body);
-        results.addAll(bodyResult.getElements());
-      }
-      Type resultType = nodeTypes.get(ctx);
-      return Value.of(results, resultType != null ? resultType : Type.set(Type.ANY));
-    } finally {
-      symbolTable.exitScope();
-    }
-  }
-
-  /**
-   * Evaluates collect operation with two iterator variables (Cartesian product).
-   *
-   * <p>Implements OCL two-variable collect: iterates over all pairs (e1, e2) from the receiver
-   * collection, applies transformation to each pair, and flattens all results into a single
-   * collection.
-   *
-   * <p>Creates nested iteration over the collection, binding both iterator variables for each pair,
-   * evaluating the body expression, and aggregating results. Useful for pairwise transformations or
-   * relationship queries.
-   *
-   * @param ctx Parser context for collect operation
-   * @param receiver Collection to iterate over
-   * @param var1 Name of first iterator variable
-   * @param var2 Name of second iterator variable
-   * @return Flattened collection of all transformation results from each pair, typed according to
-   *     type checker's analysis or Set(Any) as fallback
-   */
-  private Value evaluateCollectTwoVars(
-      OCLParser.CollectOpContext ctx, Value receiver, String var1, String var2) {
-    Type elemType = receiver.getRuntimeType().getElementType();
-    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
-    symbolTable.enterScope(iterScope);
-
-    try {
-      List<OCLElement> results = new ArrayList<>();
-      List<OCLElement> elements = receiver.getElements();
-
-      for (OCLElement elem1 : elements) {
-        for (OCLElement elem2 : elements) {
-          // Bind both iterator variables
-          VariableSymbol var1Symbol = new VariableSymbol(var1, elemType, iterScope, true);
-          var1Symbol.setValue(new Value(List.of(elem1), elemType));
-          symbolTable.defineVariable(var1Symbol);
-
-          VariableSymbol var2Symbol = new VariableSymbol(var2, elemType, iterScope, true);
-          var2Symbol.setValue(new Value(List.of(elem2), elemType));
-          symbolTable.defineVariable(var2Symbol);
-
-          // Evaluate transformation and flatten into results
-          Value bodyResult = visit(ctx.body);
-          results.addAll(bodyResult.getElements());
-        }
-      }
-      Type resultType = nodeTypes.get(ctx);
-      return Value.of(results, resultType != null ? resultType : Type.set(Type.ANY));
-    } finally {
-      symbolTable.exitScope();
-    }
   }
 
   /**
@@ -1412,116 +1105,6 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates forAll operation with a single iterator variable.
-   *
-   * <p>Implements OCL forAll semantics: returns true if all elements satisfy the predicate, false
-   * if any element fails. Short-circuits on first failure.
-   *
-   * <p>Creates a fresh local scope, binds each element sequentially, and evaluates the predicate.
-   * The predicate must return singleton Boolean for each iteration.
-   *
-   * @param ctx Parser context for forAll operation
-   * @param receiver Collection to check
-   * @param iterVar Name of iterator variable to bind
-   * @return Singleton Boolean collection: [true] if all elements satisfy predicate, [false] if any
-   *     fails, or error Value if predicate returns non-Boolean
-   */
-  private Value evaluateForAllSingleVar(
-      OCLParser.ForAllOpContext ctx, Value receiver, String iterVar) {
-    Type elemType = receiver.getRuntimeType().getElementType();
-    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
-    symbolTable.enterScope(iterScope);
-
-    try {
-      for (OCLElement elem : receiver.getElements()) {
-        // Bind current element to iterator variable
-        VariableSymbol iterSymbol = new VariableSymbol(iterVar, elemType, iterScope, true);
-        iterSymbol.setValue(new Value(List.of(elem), elemType));
-        symbolTable.defineVariable(iterSymbol);
-
-        // Evaluate predicate with current binding
-        Value bodyResult = visit(ctx.body);
-        if (bodyResult.size() != 1) {
-          return error("forAll predicate must return singleton Boolean", ctx);
-        }
-
-        Boolean condition = bodyResult.getElements().get(0).tryGetBool();
-        if (condition == null) {
-          return error("forAll predicate must return Boolean", ctx);
-        }
-
-        // Short-circuit on first false result
-        if (!condition) {
-          return Value.boolValue(false);
-        }
-      }
-      return Value.boolValue(true);
-    } finally {
-      symbolTable.exitScope();
-    }
-  }
-
-  /**
-   * Evaluates forAll operation with two iterator variables (Cartesian product).
-   *
-   * <p>Implements OCL two-variable forAll: checks if predicate holds for all pairs (e1, e2) from
-   * the receiver collection. Short-circuits on first failure.
-   *
-   * <p>Creates nested iteration over the collection, binding both iterator variables for each pair
-   * and evaluating the predicate. Useful for universal pairwise constraints like transitivity or
-   * symmetry checks.
-   *
-   * @param ctx Parser context for forAll operation
-   * @param receiver Collection to iterate over
-   * @param var1 Name of first iterator variable
-   * @param var2 Name of second iterator variable
-   * @return Singleton Boolean collection: [true] if predicate holds for all pairs, [false] if any
-   *     pair fails, or error Value if predicate returns non-Boolean
-   */
-  private Value evaluateForAllTwoVars(
-      OCLParser.ForAllOpContext ctx, Value receiver, String var1, String var2) {
-    Type elemType = receiver.getRuntimeType().getElementType();
-    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
-    symbolTable.enterScope(iterScope);
-
-    try {
-      List<OCLElement> elements = receiver.getElements();
-
-      for (OCLElement elem1 : elements) {
-        for (OCLElement elem2 : elements) {
-          // Bind both iterator variables
-          VariableSymbol var1Symbol = new VariableSymbol(var1, elemType, iterScope, true);
-          var1Symbol.setValue(new Value(List.of(elem1), elemType));
-          symbolTable.defineVariable(var1Symbol);
-
-          VariableSymbol var2Symbol = new VariableSymbol(var2, elemType, iterScope, true);
-          var2Symbol.setValue(new Value(List.of(elem2), elemType));
-          symbolTable.defineVariable(var2Symbol);
-
-          // Evaluate predicate
-          Value bodyResult = visit(ctx.body);
-          if (bodyResult.size() != 1) {
-            return error("forAll predicate must return singleton Boolean", ctx);
-          }
-
-          Boolean condition = bodyResult.getElements().get(0).tryGetBool();
-          if (condition == null) {
-            return error("forAll predicate must return Boolean", ctx);
-          }
-
-          // Short-circuit on first false result
-          if (!condition) {
-            return Value.boolValue(false);
-          }
-        }
-      }
-      return Value.boolValue(true);
-    } finally {
-      symbolTable.exitScope();
-    }
-  }
-
-  /**
    * Evaluates the {@code exists()} iterator operation.
    *
    * <p>Returns true if the predicate holds for AT LEAST ONE element in the collection.
@@ -1560,35 +1143,525 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates exists operation with a single iterator variable.
+   * Evaluates the {@code oclAsType()} operation.
    *
-   * <p>Implements OCL exists semantics: returns true if at least one element satisfies the
-   * predicate, false if none do. Short-circuits on first match.
+   * <p>Type cast operation that preserves the multiplicity semantics. The nodeTypes entry for this
+   * node is now ¡targetType! (Singleton) after the TypeCheckVisitor fix — so we must unwrap through
+   * isSingleton() as well as isCollection() to reach the bare MetaclassType.
    *
-   * <p>Creates a fresh local scope for the iterator variable, binds each collection element
-   * sequentially, and evaluates the body expression. The predicate must return a singleton Boolean
-   * for each iteration.
+   * <p>Guard against infinite unwrapping: bare types return {@code this} from {@code
+   * getElementType()}, so we stop as soon as the element type is the same object as the current
+   * type.
    *
-   * @param ctx Parser context for exists operation
-   * @param receiver Collection to iterate over
-   * @param iterVar Name of iterator variable to bind
-   * @return Singleton Boolean collection: [true] if any element satisfies predicate, [false] if
-   *     none do, or error Value if predicate returns non-Boolean
+   * @param ctx The oclAsType operation node
+   * @return The receiver elements re-wrapped with the target element type
    */
-  private Value evaluateExistsSingleVar(
-      OCLParser.ExistsOpContext ctx, Value receiver, String iterVar) {
+  @Override
+  public Value visitOclAsTypeOp(OCLParser.OclAsTypeOpContext ctx) {
+    Value receiver = receiverStack.peek();
+    Type targetType = nodeTypes.get(ctx);
+
+    if (targetType == null) {
+      return error("Cannot resolve target type in oclAsType", ctx);
+    }
+
+    // Unwrap to the bare member type: handles both {cad::Box} and !cad::Box!
+    // nodeTypes now stores !cad::Box! for singleton receivers (TypeCheckVisitor fix).
+    // Guard: bare types return `this` from getElementType() — stop when no progress.
+    Type targetElemType = targetType;
+    while ((targetElemType.isCollection() || targetElemType.isSingleton())
+        && targetElemType.getElementType() != targetElemType) {
+      targetElemType = targetElemType.getElementType();
+    }
+
+    // Primitive type cast: re-annotate with target element type, preserve collection kind
+    if (!targetElemType.isMetaclassType()) {
+      Type resultType = preserveCollectionKind(receiver.getRuntimeType(), targetElemType);
+      return Value.of(receiver.getElements(), resultType);
+    }
+
+    // Metaclass cast: validate each element via EMF inheritance
+    EClass targetEClass = targetElemType.getEClass();
+    List<OCLElement> results = new ArrayList<>();
+
+    for (OCLElement elem : receiver.getElements()) {
+      if (elem instanceof OCLElement.MetaclassValue mv) {
+        EClass elemEClass = mv.instance().eClass();
+        if (targetEClass.isSuperTypeOf(elemEClass) || elemEClass.equals(targetEClass)) {
+          results.add(new OCLElement.CastedMetaclassValue(mv.instance(), targetEClass));
+        } else {
+          return error(
+              "oclAsType: cannot cast " + elemEClass.getName() + " to " + targetEClass.getName(),
+              ctx);
+        }
+      } else if (elem instanceof OCLElement.CastedMetaclassValue cmv) {
+        // Already casted — re-validate against new target
+        EClass elemEClass = cmv.instance().eClass();
+        if (targetEClass.isSuperTypeOf(elemEClass) || elemEClass.equals(targetEClass)) {
+          results.add(new OCLElement.CastedMetaclassValue(cmv.instance(), targetEClass));
+        } else {
+          return error(
+              "oclAsType: cannot cast " + elemEClass.getName() + " to " + targetEClass.getName(),
+              ctx);
+        }
+      } else {
+        return error("oclAsType: element is not a metaclass instance", ctx);
+      }
+    }
+
+    // Result type: singleton if receiver was singleton or bare metaclass, collection otherwise
+    Type resultType;
+    if (receiver.getRuntimeType().isSingleton() || !receiver.getRuntimeType().isCollection()) {
+      resultType = Type.singleton(targetElemType);
+    } else {
+      resultType = preserveCollectionKind(receiver.getRuntimeType(), targetElemType);
+    }
+    return Value.of(results, resultType);
+  }
+
+  /**
+   * Evaluates variable references.
+   *
+   * <p>Handles the special {@code null} keyword, which evaluates to an empty optional value {@code
+   * ?Any? = []} rather than looking up a variable. All other names are resolved from the symbol
+   * table.
+   *
+   * @param ctx The variable expression node
+   * @return The value bound to the variable, or empty optional for {@code null}
+   */
+  @Override
+  public Value visitVariableExpCS(OCLParser.VariableExpCSContext ctx) {
+    String varName = ctx.varName.getText();
+
+    // null is the empty optional ?Any? = []
+    if (varName.equals("null")) {
+      return Value.empty(Type.optional(Type.ANY));
+    }
+
+    VariableSymbol varSymbol = symbolTable.resolveVariable(varName);
+    if (varSymbol == null) {
+      handleUndefinedSymbol(varName, ctx);
+      return Value.empty(Type.ERROR);
+    }
+
+    Value value = varSymbol.getValue();
+    if (value == null) {
+      return error("Variable '" + varName + "' has no value", ctx);
+    }
+
+    return value;
+  }
+
+  /**
+   * Evaluates forAll operation with a single iterator variable.
+   *
+   * <p>In each iterated element is a singleton ¡T!, so the iterator variable is bound with Value
+   * type singleton(elemType) to match the TypeCheckVisitor's normalizeToSingleton() treatment of
+   * iterator variables.
+   *
+   * @param ctx Parser context for forAll operation
+   * @param receiver Collection to check
+   * @param iterVar Name of iterator variable to bind
+   * @return Singleton Boolean: true if all elements satisfy predicate, false if any fails
+   */
+  private Value evaluateForAllSingleVar(
+      OCLParser.ForAllOpContext ctx, Value receiver, String iterVar) {
     Type elemType = receiver.getRuntimeType().getElementType();
+    // each iterated element is ¡T! — wrap to singleton so the variable type
+    // matches what TypeCheckVisitor registered via normalizeToSingleton()
+    Type iterVarType = Type.singleton(elemType);
     LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
     symbolTable.enterScope(iterScope);
 
     try {
       for (OCLElement elem : receiver.getElements()) {
-        // Bind current element to iterator variable
-        VariableSymbol iterSymbol = new VariableSymbol(iterVar, elemType, iterScope, true);
-        iterSymbol.setValue(new Value(List.of(elem), elemType));
+        // Bind current element as singleton ¡T! value
+        VariableSymbol iterSymbol = new VariableSymbol(iterVar, iterVarType, iterScope, true);
+        iterSymbol.setValue(new Value(List.of(elem), iterVarType));
         symbolTable.defineVariable(iterSymbol);
 
-        // Evaluate predicate with current binding
+        Value bodyResult = visit(ctx.body);
+        if (bodyResult.size() != 1) {
+          return error("forAll predicate must return singleton Boolean", ctx);
+        }
+
+        Boolean condition = bodyResult.getElements().get(0).tryGetBool();
+        if (condition == null) {
+          return error("forAll predicate must return Boolean", ctx);
+        }
+
+        // Short-circuit on first false result
+        if (!condition) {
+          return Value.boolValue(false);
+        }
+      }
+      return Value.boolValue(true);
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Evaluates forAll operation with two iterator variables (Cartesian product).
+   *
+   * <p>Iterator variables are bound as singleton ¡T! per semantics.
+   *
+   * @param ctx Parser context for forAll operation
+   * @param receiver Collection to iterate over
+   * @param var1 Name of first iterator variable
+   * @param var2 Name of second iterator variable
+   * @return Singleton Boolean: true if predicate holds for all pairs, false if any pair fails
+   */
+  private Value evaluateForAllTwoVars(
+      OCLParser.ForAllOpContext ctx, Value receiver, String var1, String var2) {
+    Type elemType = receiver.getRuntimeType().getElementType();
+    Type iterVarType = Type.singleton(elemType);
+    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
+    symbolTable.enterScope(iterScope);
+
+    try {
+      List<OCLElement> elements = receiver.getElements();
+
+      for (OCLElement elem1 : elements) {
+        for (OCLElement elem2 : elements) {
+          // Bind both iterator variables as singletons ¡T!
+          VariableSymbol var1Symbol = new VariableSymbol(var1, iterVarType, iterScope, true);
+          var1Symbol.setValue(new Value(List.of(elem1), iterVarType));
+          symbolTable.defineVariable(var1Symbol);
+
+          VariableSymbol var2Symbol = new VariableSymbol(var2, iterVarType, iterScope, true);
+          var2Symbol.setValue(new Value(List.of(elem2), iterVarType));
+          symbolTable.defineVariable(var2Symbol);
+
+          Value bodyResult = visit(ctx.body);
+          if (bodyResult.size() != 1) {
+            return error("forAll predicate must return singleton Boolean", ctx);
+          }
+
+          Boolean condition = bodyResult.getElements().get(0).tryGetBool();
+          if (condition == null) {
+            return error("forAll predicate must return Boolean", ctx);
+          }
+
+          // Short-circuit on first false result
+          if (!condition) {
+            return Value.boolValue(false);
+          }
+        }
+      }
+      return Value.boolValue(true);
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Evaluates select operation with a single iterator variable.
+   *
+   * <p>Iterator variable is bound as singleton ¡T! per semantics.
+   *
+   * @param ctx Parser context for select operation
+   * @param receiver Collection to filter
+   * @param iterVar Name of iterator variable to bind
+   * @return Collection of elements satisfying the predicate
+   */
+  private Value evaluateSelectSingleVar(
+      OCLParser.SelectOpContext ctx, Value receiver, String iterVar) {
+    Type elemType = receiver.getRuntimeType().getElementType();
+    Type iterVarType = Type.singleton(elemType);
+    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
+    symbolTable.enterScope(iterScope);
+
+    try {
+      List<OCLElement> results = new ArrayList<>();
+      for (OCLElement elem : receiver.getElements()) {
+        // Bind current element as singleton ¡T!
+        VariableSymbol iterSymbol = new VariableSymbol(iterVar, iterVarType, iterScope, true);
+        iterSymbol.setValue(new Value(List.of(elem), iterVarType));
+        symbolTable.defineVariable(iterSymbol);
+
+        Value bodyResult = visit(ctx.body);
+        if (bodyResult.size() != 1) {
+          return error("select predicate must return singleton Boolean", ctx);
+        }
+
+        Boolean condition = bodyResult.getElements().get(0).tryGetBool();
+        if (condition == null) {
+          return error("select predicate must return Boolean", ctx);
+        }
+
+        if (condition) {
+          results.add(elem);
+        }
+      }
+      return Value.of(results, receiver.getRuntimeType());
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Evaluates select operation with two iterator variables (Cartesian product).
+   *
+   * <p>Iterator variables are bound as singleton ¡T! per semantics.
+   *
+   * @param ctx Parser context for select operation
+   * @param receiver Collection to iterate over
+   * @param var1 Name of first iterator variable
+   * @param var2 Name of second iterator variable
+   * @return Collection containing both elements of each matching pair
+   */
+  private Value evaluateSelectTwoVars(
+      OCLParser.SelectOpContext ctx, Value receiver, String var1, String var2) {
+    Type elemType = receiver.getRuntimeType().getElementType();
+    Type iterVarType = Type.singleton(elemType);
+    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
+    symbolTable.enterScope(iterScope);
+
+    try {
+      List<OCLElement> results = new ArrayList<>();
+      List<OCLElement> elements = receiver.getElements();
+
+      for (OCLElement elem1 : elements) {
+        for (OCLElement elem2 : elements) {
+          // Bind both iterator variables as singletons ¡T!
+          VariableSymbol var1Symbol = new VariableSymbol(var1, iterVarType, iterScope, true);
+          var1Symbol.setValue(new Value(List.of(elem1), iterVarType));
+          symbolTable.defineVariable(var1Symbol);
+
+          VariableSymbol var2Symbol = new VariableSymbol(var2, iterVarType, iterScope, true);
+          var2Symbol.setValue(new Value(List.of(elem2), iterVarType));
+          symbolTable.defineVariable(var2Symbol);
+
+          Value bodyResult = visit(ctx.body);
+          if (bodyResult.size() != 1) {
+            return error("select predicate must return singleton Boolean", ctx);
+          }
+
+          Boolean condition = bodyResult.getElements().get(0).tryGetBool();
+          if (condition == null) {
+            return error("select predicate must return Boolean", ctx);
+          }
+
+          if (condition) {
+            results.add(elem1);
+            results.add(elem2);
+          }
+        }
+      }
+      return Value.of(results, receiver.getRuntimeType());
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Evaluates reject operation with a single iterator variable.
+   *
+   * <p>Iterator variable is bound as singleton ¡T! per semantics.
+   *
+   * @param ctx Parser context for reject operation
+   * @param receiver Collection to filter
+   * @param iterVar Name of iterator variable to bind
+   * @return Collection of elements NOT satisfying the predicate
+   */
+  private Value evaluateRejectSingleVar(
+      OCLParser.RejectOpContext ctx, Value receiver, String iterVar) {
+    Type elemType = receiver.getRuntimeType().getElementType();
+    Type iterVarType = Type.singleton(elemType);
+    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
+    symbolTable.enterScope(iterScope);
+
+    try {
+      List<OCLElement> results = new ArrayList<>();
+      for (OCLElement elem : receiver.getElements()) {
+        // Bind current element as singleton ¡T!
+        VariableSymbol iterSymbol = new VariableSymbol(iterVar, iterVarType, iterScope, true);
+        iterSymbol.setValue(new Value(List.of(elem), iterVarType));
+        symbolTable.defineVariable(iterSymbol);
+
+        Value bodyResult = visit(ctx.body);
+        if (bodyResult.size() != 1) {
+          return error("reject predicate must return singleton Boolean", ctx);
+        }
+
+        Boolean condition = bodyResult.getElements().get(0).tryGetBool();
+        if (condition == null) {
+          return error("reject predicate must return Boolean", ctx);
+        }
+
+        // Collect elements where predicate is false
+        if (!condition) {
+          results.add(elem);
+        }
+      }
+      return Value.of(results, receiver.getRuntimeType());
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Evaluates reject operation with two iterator variables (Cartesian product).
+   *
+   * <p>Iterator variables are bound as singleton ¡T! per semantics.
+   *
+   * @param ctx Parser context for reject operation
+   * @param receiver Collection to iterate over
+   * @param var1 Name of first iterator variable
+   * @param var2 Name of second iterator variable
+   * @return Collection containing both elements of each non-matching pair
+   */
+  private Value evaluateRejectTwoVars(
+      OCLParser.RejectOpContext ctx, Value receiver, String var1, String var2) {
+    Type elemType = receiver.getRuntimeType().getElementType();
+    Type iterVarType = Type.singleton(elemType);
+    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
+    symbolTable.enterScope(iterScope);
+
+    try {
+      List<OCLElement> results = new ArrayList<>();
+      List<OCLElement> elements = receiver.getElements();
+
+      for (OCLElement elem1 : elements) {
+        for (OCLElement elem2 : elements) {
+          // Bind both iterator variables as singletons ¡T!
+          VariableSymbol var1Symbol = new VariableSymbol(var1, iterVarType, iterScope, true);
+          var1Symbol.setValue(new Value(List.of(elem1), iterVarType));
+          symbolTable.defineVariable(var1Symbol);
+
+          VariableSymbol var2Symbol = new VariableSymbol(var2, iterVarType, iterScope, true);
+          var2Symbol.setValue(new Value(List.of(elem2), iterVarType));
+          symbolTable.defineVariable(var2Symbol);
+
+          Value bodyResult = visit(ctx.body);
+          if (bodyResult.size() != 1) {
+            return error("reject predicate must return singleton Boolean", ctx);
+          }
+
+          Boolean condition = bodyResult.getElements().get(0).tryGetBool();
+          if (condition == null) {
+            return error("reject predicate must return Boolean", ctx);
+          }
+
+          // Add pair if predicate is FALSE
+          if (!condition) {
+            results.add(elem1);
+            results.add(elem2);
+          }
+        }
+      }
+      return Value.of(results, receiver.getRuntimeType());
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Evaluates collect operation with a single iterator variable.
+   *
+   * <p>Iterator variable is bound as singleton ¡T! per semantics.
+   *
+   * @param ctx Parser context for collect operation
+   * @param receiver Collection to transform
+   * @param iterVar Name of iterator variable to bind
+   * @return Flattened collection of all transformation results
+   */
+  private Value evaluateCollectSingleVar(
+      OCLParser.CollectOpContext ctx, Value receiver, String iterVar) {
+    Type elemType = receiver.getRuntimeType().getElementType();
+    Type iterVarType = Type.singleton(elemType);
+    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
+    symbolTable.enterScope(iterScope);
+
+    try {
+      List<OCLElement> results = new ArrayList<>();
+      for (OCLElement elem : receiver.getElements()) {
+        // Bind current element as singleton ¡T!
+        VariableSymbol iterSymbol = new VariableSymbol(iterVar, iterVarType, iterScope, true);
+        iterSymbol.setValue(new Value(List.of(elem), iterVarType));
+        symbolTable.defineVariable(iterSymbol);
+
+        // Evaluate transformation and flatten all result elements into list
+        Value bodyResult = visit(ctx.body);
+        results.addAll(bodyResult.getElements());
+      }
+      Type resultType = nodeTypes.get(ctx);
+      return Value.of(results, resultType != null ? resultType : Type.set(Type.ANY));
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Evaluates collect operation with two iterator variables (Cartesian product).
+   *
+   * <p>Iterator variables are bound as singleton ¡T! per semantics.
+   *
+   * @param ctx Parser context for collect operation
+   * @param receiver Collection to iterate over
+   * @param var1 Name of first iterator variable
+   * @param var2 Name of second iterator variable
+   * @return Flattened collection of all transformation results from each pair
+   */
+  private Value evaluateCollectTwoVars(
+      OCLParser.CollectOpContext ctx, Value receiver, String var1, String var2) {
+    Type elemType = receiver.getRuntimeType().getElementType();
+    Type iterVarType = Type.singleton(elemType);
+    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
+    symbolTable.enterScope(iterScope);
+
+    try {
+      List<OCLElement> results = new ArrayList<>();
+      List<OCLElement> elements = receiver.getElements();
+
+      for (OCLElement elem1 : elements) {
+        for (OCLElement elem2 : elements) {
+          // Bind both iterator variables as singletons ¡T!
+          VariableSymbol var1Symbol = new VariableSymbol(var1, iterVarType, iterScope, true);
+          var1Symbol.setValue(new Value(List.of(elem1), iterVarType));
+          symbolTable.defineVariable(var1Symbol);
+
+          VariableSymbol var2Symbol = new VariableSymbol(var2, iterVarType, iterScope, true);
+          var2Symbol.setValue(new Value(List.of(elem2), iterVarType));
+          symbolTable.defineVariable(var2Symbol);
+
+          // Evaluate transformation and flatten into results
+          Value bodyResult = visit(ctx.body);
+          results.addAll(bodyResult.getElements());
+        }
+      }
+      Type resultType = nodeTypes.get(ctx);
+      return Value.of(results, resultType != null ? resultType : Type.set(Type.ANY));
+    } finally {
+      symbolTable.exitScope();
+    }
+  }
+
+  /**
+   * Evaluates exists operation with a single iterator variable.
+   *
+   * <p>Iterator variable is bound as singleton ¡T!.
+   *
+   * @param ctx Parser context for exists operation
+   * @param receiver Collection to iterate over
+   * @param iterVar Name of iterator variable to bind
+   * @return Singleton Boolean: true if any element satisfies predicate, false if none do
+   */
+  private Value evaluateExistsSingleVar(
+      OCLParser.ExistsOpContext ctx, Value receiver, String iterVar) {
+    Type elemType = receiver.getRuntimeType().getElementType();
+    Type iterVarType = Type.singleton(elemType);
+    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
+    symbolTable.enterScope(iterScope);
+
+    try {
+      for (OCLElement elem : receiver.getElements()) {
+        // Bind current element as singleton ¡T!
+        VariableSymbol iterSymbol = new VariableSymbol(iterVar, iterVarType, iterScope, true);
+        iterSymbol.setValue(new Value(List.of(elem), iterVarType));
+        symbolTable.defineVariable(iterSymbol);
+
         Value bodyResult = visit(ctx.body);
         if (bodyResult.size() != 1) {
           return error("exists predicate must return singleton Boolean", ctx);
@@ -1613,23 +1686,18 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates exists operation with two iterator variables (Cartesian product).
    *
-   * <p>Implements OCL two-variable exists: returns true if at least one pair (e1, e2) satisfies the
-   * predicate. Short-circuits on first match.
-   *
-   * <p>Creates nested iteration over the collection, binding both iterator variables for each pair
-   * and evaluating the predicate. Useful for existential pairwise constraints like finding related
-   * elements or checking relationships.
+   * <p>Iterator variables are bound as singleton ¡T!.
    *
    * @param ctx Parser context for exists operation
    * @param receiver Collection to iterate over
    * @param var1 Name of first iterator variable
    * @param var2 Name of second iterator variable
-   * @return Singleton Boolean collection: [true] if any pair satisfies predicate, [false] if no
-   *     pairs do, or error Value if predicate returns non-Boolean
+   * @return Singleton Boolean: true if any pair satisfies predicate, false if no pairs do
    */
   private Value evaluateExistsTwoVars(
       OCLParser.ExistsOpContext ctx, Value receiver, String var1, String var2) {
     Type elemType = receiver.getRuntimeType().getElementType();
+    Type iterVarType = Type.singleton(elemType);
     LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
     symbolTable.enterScope(iterScope);
 
@@ -1638,16 +1706,15 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
 
       for (OCLElement elem1 : elements) {
         for (OCLElement elem2 : elements) {
-          // Bind both iterator variables
-          VariableSymbol var1Symbol = new VariableSymbol(var1, elemType, iterScope, true);
-          var1Symbol.setValue(new Value(List.of(elem1), elemType));
+          // Bind both iterator variables as singletons ¡T!
+          VariableSymbol var1Symbol = new VariableSymbol(var1, iterVarType, iterScope, true);
+          var1Symbol.setValue(new Value(List.of(elem1), iterVarType));
           symbolTable.defineVariable(var1Symbol);
 
-          VariableSymbol var2Symbol = new VariableSymbol(var2, elemType, iterScope, true);
-          var2Symbol.setValue(new Value(List.of(elem2), elemType));
+          VariableSymbol var2Symbol = new VariableSymbol(var2, iterVarType, iterScope, true);
+          var2Symbol.setValue(new Value(List.of(elem2), iterVarType));
           symbolTable.defineVariable(var2Symbol);
 
-          // Evaluate predicate
           Value bodyResult = visit(ctx.body);
           if (bodyResult.size() != 1) {
             return error("exists predicate must return singleton Boolean", ctx);
@@ -1673,19 +1740,21 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   // ==================== Arithmetic Operations ====================
 
   /**
-   * Evaluates multiplicative operations (* and /).
+   * Evaluates multiplicative operations ({@code *} and {@code /}).
    *
-   * <p>Both operands must be singleton integers. Division by zero is reported as an error.
-   *
-   * <p><b>Examples:</b>
+   * <p>Numeric promotion (INTEGER ⊂ FLOAT ⊂ DOUBLE):
    *
    * <ul>
-   *   <li>{@code 6 * 7} → {@code 42}
-   *   <li>{@code 10 / 2} → {@code 5}
+   *   <li>Both operands INTEGER → integer arithmetic
+   *   <li>Either operand FLOAT (and neither DOUBLE) → float arithmetic
+   *   <li>Either operand DOUBLE → double arithmetic
    * </ul>
    *
+   * <p>Integer division by zero is an error; floating-point division by zero produces ±Infinity
+   * following IEEE 754.
+   *
    * @param ctx The multiplicative operation node
-   * @return A singleton integer value
+   * @return A singleton numeric value
    */
   @Override
   public Value visitMultiplicative(OCLParser.MultiplicativeContext ctx) {
@@ -1700,35 +1769,53 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     OCLElement leftElem = leftValue.getElements().get(0);
     OCLElement rightElem = rightValue.getElements().get(0);
 
-    Integer left = leftElem.tryGetInt();
-    Integer right = rightElem.tryGetInt();
-
-    if (left == null || right == null) {
-      return error("Arithmetic requires integer operands", ctx);
+    // ── Integer × Integer ──────────────────────────────────────────────────
+    Integer leftInt = leftElem.tryGetInt();
+    Integer rightInt = rightElem.tryGetInt();
+    if (leftInt != null && rightInt != null) {
+      if (operator.equals("/") && rightInt == 0) {
+        return error("Integer division by zero", ctx);
+      }
+      int result = operator.equals("*") ? leftInt * rightInt : leftInt / rightInt;
+      return Value.intValue(result);
     }
 
-    if (operator.equals("/") && right == 0) {
-      return error("Division by zero", ctx);
+    // ── Any numeric × Any numeric → promote to double ──────────────────────
+    if (OCLElement.isNumeric(leftElem) && OCLElement.isNumeric(rightElem)) {
+      double l = leftElem.toDoubleValue();
+      double r = rightElem.toDoubleValue();
+      double result = operator.equals("*") ? l * r : l / r;
+
+      // If both operands are Float → stay Float (no Double contamination)
+      if (leftElem instanceof OCLElement.FloatValue && rightElem instanceof OCLElement.FloatValue) {
+        return Value.of(
+            java.util.List.of(new OCLElement.FloatValue((float) result)),
+            tools.vitruv.multimodelocl.typechecker.Type.FLOAT);
+      }
+      return Value.doubleValue(result);
     }
 
-    int result = operator.equals("*") ? left * right : left / right;
-    return Value.intValue(result);
+    return error(
+        "Arithmetic requires numeric operands, got "
+            + leftElem.getClass().getSimpleName()
+            + " and "
+            + rightElem.getClass().getSimpleName(),
+        ctx);
   }
 
   /**
-   * Evaluates additive operations (+ and -).
+   * Evaluates additive operations ({@code +} and {@code -}).
    *
-   * <p>Both operands must be singleton integers.
-   *
-   * <p><b>Examples:</b>
+   * <p>Numeric promotion (INTEGER ⊂ FLOAT ⊂ DOUBLE):
    *
    * <ul>
-   *   <li>{@code 3 + 4} → {@code 7}
-   *   <li>{@code 10 - 3} → {@code 7}
+   *   <li>Both operands INTEGER → integer arithmetic
+   *   <li>Either operand FLOAT (and neither DOUBLE) → float arithmetic
+   *   <li>Either operand DOUBLE → double arithmetic
    * </ul>
    *
    * @param ctx The additive operation node
-   * @return A singleton integer value
+   * @return A singleton numeric value
    */
   @Override
   public Value visitAdditive(OCLParser.AdditiveContext ctx) {
@@ -1743,15 +1830,35 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     OCLElement leftElem = leftValue.getElements().get(0);
     OCLElement rightElem = rightValue.getElements().get(0);
 
-    Integer left = leftElem.tryGetInt();
-    Integer right = rightElem.tryGetInt();
-
-    if (left == null || right == null) {
-      return error("Arithmetic requires integer operands", ctx);
+    // ── Integer ± Integer ──────────────────────────────────────────────────
+    Integer leftInt = leftElem.tryGetInt();
+    Integer rightInt = rightElem.tryGetInt();
+    if (leftInt != null && rightInt != null) {
+      int result = operator.equals("+") ? leftInt + rightInt : leftInt - rightInt;
+      return Value.intValue(result);
     }
 
-    int result = operator.equals("+") ? left + right : left - right;
-    return Value.intValue(result);
+    // ── Any numeric ± Any numeric → promote to double ──────────────────────
+    if (OCLElement.isNumeric(leftElem) && OCLElement.isNumeric(rightElem)) {
+      double l = leftElem.toDoubleValue();
+      double r = rightElem.toDoubleValue();
+      double result = operator.equals("+") ? l + r : l - r;
+
+      // If both operands are Float → stay Float
+      if (leftElem instanceof OCLElement.FloatValue && rightElem instanceof OCLElement.FloatValue) {
+        return Value.of(
+            java.util.List.of(new OCLElement.FloatValue((float) result)),
+            tools.vitruv.multimodelocl.typechecker.Type.FLOAT);
+      }
+      return Value.doubleValue(result);
+    }
+
+    return error(
+        "Arithmetic requires numeric operands, got "
+            + leftElem.getClass().getSimpleName()
+            + " and "
+            + rightElem.getClass().getSimpleName(),
+        ctx);
   }
 
   // ==================== Comparison Operations ====================
@@ -2243,12 +2350,22 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Wraps a Java value into an {@link OCLElement}.
+   * Wraps a raw Java value from EMF's {@code eGet()} into an {@link OCLElement}.
    *
-   * <p>Converts EMF attribute values and EObject instances into their OCL runtime representations.
+   * <p>Type mapping:
    *
-   * @param value The Java value to wrap (must not be null)
-   * @return The wrapped OCL element
+   * <ul>
+   *   <li>{@link String} → {@link OCLElement.StringValue}
+   *   <li>{@link Integer} → {@link OCLElement.IntValue}
+   *   <li>{@link Boolean} → {@link OCLElement.BoolValue}
+   *   <li>{@link Float} → {@link OCLElement.FloatValue} (EMF {@code EFloat} attributes)
+   *   <li>{@link Double} → {@link OCLElement.DoubleValue}
+   *   <li>{@link EEnumLiteral} → {@link OCLElement.EnumValue}
+   *   <li>{@link EObject} → {@link OCLElement.MetaclassValue}
+   * </ul>
+   *
+   * @param value the raw Java value returned by {@code EObject.eGet(feature)}
+   * @return the corresponding {@link OCLElement}
    * @throws RuntimeException if the value type is not supported
    */
   private OCLElement wrapValue(Object value) {
@@ -2267,17 +2384,23 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     if (clazz.equals(Boolean.class)) {
       return new OCLElement.BoolValue((Boolean) value);
     }
-    if (EObject.class.isAssignableFrom(clazz)) {
-      return new OCLElement.MetaclassValue((EObject) value);
-    }
+    // EFloat is stored as Java Float — wrap as FloatValue, NOT DoubleValue
     if (clazz.equals(Float.class)) {
       return new OCLElement.FloatValue((Float) value);
     }
     if (clazz.equals(Double.class)) {
       return new OCLElement.DoubleValue((Double) value);
     }
+    // EMF enum literals (EAttribute whose eType is an EEnum)
+    if (value instanceof EEnumLiteral enumLit) {
+      return new OCLElement.EnumValue(enumLit);
+    }
+    // Any other EObject (class instance from a metamodel)
+    if (EObject.class.isAssignableFrom(clazz)) {
+      return new OCLElement.MetaclassValue((EObject) value);
+    }
 
-    throw new RuntimeException("Cannot wrap: " + value.getClass());
+    throw new RuntimeException("Cannot wrap value of type: " + clazz.getName());
   }
 
   // ==================== Type Checking Operations ====================
@@ -2346,55 +2469,6 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
 
     Type resultType = nodeTypes.get(ctx);
     return Value.of(results, resultType != null ? resultType : Type.set(Type.BOOLEAN));
-  }
-
-  /**
-   * Evaluates the {@code oclAsType()} operation.
-   *
-   * <p>Type cast operation. Currently returns the receiver with updated type information.
-   *
-   * @param ctx The oclAsType operation node
-   * @return The receiver with the target type
-   */
-  @Override
-  public Value visitOclAsTypeOp(OCLParser.OclAsTypeOpContext ctx) {
-    Value receiver = receiverStack.peek();
-    Type targetType = nodeTypes.get(ctx);
-
-    if (targetType == null) {
-      return error("Cannot resolve target type in oclAsType", ctx);
-    }
-
-    // Unwrap collection to get the actual element type
-    Type targetElemType = targetType.isCollection() ? targetType.getElementType() : targetType;
-
-    // Primitive Type cast: just re-annotate with target type
-    if (!targetElemType.isMetaclassType()) {
-      Type resultType = preserveCollectionKind(receiver.getRuntimeType(), targetElemType);
-      return Value.of(receiver.getElements(), resultType);
-    }
-
-    // Metaclass cast: validate each element via EMF inheritance
-    EClass targetEClass = targetElemType.getEClass();
-    List<OCLElement> results = new ArrayList<>();
-
-    for (OCLElement elem : receiver.getElements()) {
-      if (elem instanceof OCLElement.MetaclassValue mv) {
-        EClass elemEClass = mv.instance().eClass();
-        if (targetEClass.isSuperTypeOf(elemEClass) || elemEClass.equals(targetEClass)) {
-          results.add(new OCLElement.CastedMetaclassValue(mv.instance(), targetEClass));
-        } else {
-          return error(
-              "oclAsType: cannot cast " + elemEClass.getName() + " to " + targetEClass.getName(),
-              ctx);
-        }
-      } else {
-        return error("oclAsType: element is not a metaclass instance", ctx);
-      }
-    }
-
-    Type resultType = preserveCollectionKind(receiver.getRuntimeType(), targetElemType);
-    return Value.of(results, resultType);
   }
 
   /** Preserves collection kind of receiver while changing element type. */
@@ -2698,35 +2772,6 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   // ==================== Variable Handling ====================
-
-  /**
-   * Evaluates variable references.
-   *
-   * <p>Looks up the variable in the symbol table and returns its bound value.
-   *
-   * <p><b>Example:</b> In {@code let x = 5 in x + 1}, the second {@code x} is resolved here.
-   *
-   * @param ctx The variable expression node
-   * @return The value bound to the variable
-   */
-  @Override
-  public Value visitVariableExpCS(OCLParser.VariableExpCSContext ctx) {
-    String varName = ctx.varName.getText();
-
-    VariableSymbol varSymbol = symbolTable.resolveVariable(varName);
-    if (varSymbol == null) {
-      handleUndefinedSymbol(varName, ctx);
-      return Value.empty(Type.ERROR);
-    }
-
-    Value value = varSymbol.getValue();
-
-    if (value == null) {
-      return error("Variable '" + varName + "' has no value", ctx);
-    }
-
-    return value;
-  }
 
   /**
    * Evaluates {@code self} references.
@@ -3309,5 +3354,51 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
    */
   public void setTokenStream(org.antlr.v4.runtime.TokenStream tokens) {
     this.tokens = tokens;
+  }
+
+  /**
+   * Normalizes a type to its singleton ctype.
+   *
+   * <p>Every expression has a ctype χ = τ[l,r](μ,ω). Bare primitive types (INTEGER, STRING, etc.)
+   * and bare metaclass types are implicitly ¡T![1,1]. This method makes that wrapping explicit so
+   * all downstream operations can rely on it.
+   *
+   * <p>Multi-valued collections ({T}, [T], etc.) are returned unchanged.
+   *
+   * @param t the type to normalize
+   * @return ¡t! if t is a bare scalar, t unchanged if already wrapped
+   */
+  private Type normalizeToSingleton(Type t) {
+    if (t == Type.ERROR || t == Type.ANY) {
+      return t;
+    }
+    if (t.isCollection()) {
+      return t;
+    } // {T}, [T], <T>, {{T}} — already proper ctype
+    if (t.isSingleton()) {
+      return t;
+    } // !T! — already wrapped
+    if (t.isOptional()) {
+      return t;
+    } // ?T? — already wrapped
+    return Type.singleton(t); // bare INTEGER, STRING, cad::Sphere → !T!
+  }
+
+  /**
+   * Unwraps one level of collection/singleton to get the scalar member type.
+   *
+   * <p>Used when an operation needs to work on the member type τ of a ctype χ = τ[l,r].
+   *
+   * @param t the ctype to unwrap
+   * @return the member type τ, or t if it has no wrapper
+   */
+  private Type unwrapOne(Type t) {
+    if (t == Type.ERROR || t == Type.ANY) {
+      return t;
+    }
+    if (t.isCollection() || t.isSingleton() || t.isOptional()) {
+      return t.getElementType();
+    }
+    return t; // bare type — already scalar
   }
 }

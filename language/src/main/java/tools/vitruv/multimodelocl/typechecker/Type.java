@@ -342,14 +342,19 @@ public abstract class Type {
   private static class IntegerType extends Type {
     @Override
     public boolean isConformantTo(Type other) {
-      if (other == INTEGER) return true;
-      if (other == FLOAT) return true;
-      if (other == DOUBLE) return true;
-      if (other == ERROR) return true;
-      if (other == ANY) return true;
-
-      // Singleton !int! conforms to base int
-      if (other.isSingleton() && other.getElementType() == INTEGER) {
+      if (other == INTEGER) {
+        return true;
+      }
+      if (other == FLOAT) {
+        return true;
+      }
+      if (other == DOUBLE) {
+        return true;
+      }
+      if (other == ERROR) {
+        return true;
+      }
+      if (other == ANY) {
         return true;
       }
 
@@ -375,9 +380,15 @@ public abstract class Type {
   private static class BooleanType extends Type {
     @Override
     public boolean isConformantTo(Type other) {
-      if (other == BOOLEAN) return true;
-      if (other == ERROR) return true;
-      if (other == ANY) return true;
+      if (other == BOOLEAN) {
+        return true;
+      }
+      if (other == ERROR) {
+        return true;
+      }
+      if (other == ANY) {
+        return true;
+      }
 
       // Singleton !bool! conforms to base bool
       if (other.isSingleton() && other.getElementType() == BOOLEAN) {
@@ -405,14 +416,19 @@ public abstract class Type {
   private static class DoubleType extends Type {
     @Override
     public boolean isConformantTo(Type other) {
-      if (other == DOUBLE) return true;
-      if (other == INTEGER) return true;
-      if (other == ERROR) return true;
-      if (other == ANY) return true;
-      if (other == FLOAT) return true;
-
-      // Singleton !double! conforms to base double
-      if (other.isSingleton() && other.getElementType() == DOUBLE) {
+      if (other == DOUBLE) {
+        return true;
+      }
+      if (other == INTEGER) {
+        return true;
+      }
+      if (other == ERROR) {
+        return true;
+      }
+      if (other == ANY) {
+        return true;
+      }
+      if (other == FLOAT) {
         return true;
       }
 
@@ -438,15 +454,31 @@ public abstract class Type {
   private static class FloatType extends Type {
     @Override
     public boolean isConformantTo(Type other) {
-      if (other == FLOAT) return true;
-      if (other == DOUBLE) return true; // Float conforms to Double
-      if (other == INTEGER) return true;
-      if (other == ERROR) return true;
-      if (other == ANY) return true;
+      if (other == FLOAT) {
+        return true;
+      }
+      if (other == DOUBLE) {
+        return true;
+      }
+      if (other == INTEGER) {
+        return true;
+      }
+      if (other == ERROR) {
+        return true;
+      }
+      if (other == ANY) {
+        return true;
+      }
 
-      if (other.isSingleton() && other.getElementType() == FLOAT) return true;
-      if (other.getElementType() == FLOAT) return true;
-      if (other.getElementType() == DOUBLE) return true;
+      if (other.isSingleton() && other.getElementType() == FLOAT) {
+        return true;
+      }
+      if (other.getElementType() == FLOAT) {
+        return true;
+      }
+      if (other.getElementType() == DOUBLE) {
+        return true;
+      }
 
       return false;
     }
@@ -466,12 +498,13 @@ public abstract class Type {
   private static class StringType extends Type {
     @Override
     public boolean isConformantTo(Type other) {
-      if (other == STRING) return true;
-      if (other == ERROR) return true;
-      if (other == ANY) return true;
-
-      // Singleton !String! conforms to base String
-      if (other.isSingleton() && other.getElementType() == STRING) {
+      if (other == STRING) {
+        return true;
+      }
+      if (other == ERROR) {
+        return true;
+      }
+      if (other == ANY) {
         return true;
       }
 
@@ -497,7 +530,9 @@ public abstract class Type {
   private static class AnyType extends Type {
     @Override
     public boolean isConformantTo(Type other) {
-      if (other == ERROR) return true;
+      if (other == ERROR) {
+        return true;
+      }
       return other == ANY;
     }
 
@@ -528,7 +563,9 @@ public abstract class Type {
 
     @Override
     public boolean isConformantTo(Type other) {
-      if (other == ERROR || other == ANY) return true;
+      if (other == ERROR || other == ANY) {
+        return true;
+      }
 
       // Singleton metaclass conforms to base metaclass
       if (other.isSingleton() && other.getElementType() instanceof MetaclassType otherMeta) {
@@ -589,15 +626,27 @@ public abstract class Type {
 
     @Override
     public boolean isConformantTo(Type other) {
-      if (other == ERROR) return true;
-      if (other == ANY) return true;
-
-      // Singleton conforms to its unwrapped element type
-      if (this.isSingleton() && this.elementType.equals(other)) {
+      if (other == ERROR) {
+        return true;
+      }
+      if (other == ANY) {
         return true;
       }
 
-      // Collection conformance: both element type and multiplicity must conform
+      // ── Singleton unwrapping rules ──────────────────────────────────────────
+      // 1. Singleton!T! conforms to its bare element type T
+      //    e.g.: !Integer! conforms to Integer
+      if (this.isSingleton() && this.elementType.isConformantTo(other)) {
+        return true;
+      }
+
+      // 2. Singleton!Metaclass! conforms to Metaclass (without wrapping)
+      if (this.isSingleton() && other.isMetaclassType() && this.elementType.isMetaclassType()) {
+        // delegate to MetaclassType's own conformance (handles inheritance)
+        return this.elementType.isConformantTo(other);
+      }
+
+      // ── Collection-to-collection conformance ────────────────────────────────
       if (other instanceof CollectionType otherColl) {
         if (!this.elementType.isConformantTo(otherColl.elementType)) {
           return false;
@@ -699,8 +748,12 @@ public abstract class Type {
    * @return The least common supertype of t1 and t2
    */
   public static Type commonSuperType(Type t1, Type t2) {
-    if (t1.equals(t2)) return t1;
-    if (t1 == ERROR || t2 == ERROR) return ERROR;
+    if (t1.equals(t2)) {
+      return t1;
+    }
+    if (t1 == ERROR || t2 == ERROR) {
+      return ERROR;
+    }
 
     boolean t1Primitive =
         (t1 == INTEGER || t1 == STRING || t1 == BOOLEAN || t1 == DOUBLE || t1 == FLOAT);
@@ -717,9 +770,15 @@ public abstract class Type {
       boolean unique = t1.isUnique() && t2.isUnique();
       boolean ordered = t1.isOrdered() && t2.isOrdered();
 
-      if (unique && ordered) return orderedSet(elemSuper);
-      if (unique) return set(elemSuper);
-      if (ordered) return sequence(elemSuper);
+      if (unique && ordered) {
+        return orderedSet(elemSuper);
+      }
+      if (unique) {
+        return set(elemSuper);
+      }
+      if (ordered) {
+        return sequence(elemSuper);
+      }
       return bag(elemSuper);
     }
 
@@ -741,9 +800,15 @@ public abstract class Type {
    * @return Negative if v1 &lt; v2, zero if equal, positive if v1 &gt; v2
    */
   public static int compare(Value v1, Value v2) {
-    if (v1 == v2) return 0;
-    if (v1 == null) return -1;
-    if (v2 == null) return 1;
+    if (v1 == v2) {
+      return 0;
+    }
+    if (v1 == null) {
+      return -1;
+    }
+    if (v2 == null) {
+      return 1;
+    }
 
     int sizeCompare = Integer.compare(v1.size(), v2.size());
     if (sizeCompare != 0) {

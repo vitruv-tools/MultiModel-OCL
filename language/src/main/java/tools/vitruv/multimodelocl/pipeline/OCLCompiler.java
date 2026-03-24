@@ -19,6 +19,7 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import tools.vitruv.multimodelocl.OCLLexer;
 import tools.vitruv.multimodelocl.OCLParser;
 import tools.vitruv.multimodelocl.common.ErrorCollector;
+import tools.vitruv.multimodelocl.common.ErrorSeverity;
 import tools.vitruv.multimodelocl.evaluator.EvaluationVisitor;
 import tools.vitruv.multimodelocl.evaluator.Value;
 import tools.vitruv.multimodelocl.symboltable.ScopeAnnotator;
@@ -87,7 +88,9 @@ public class OCLCompiler {
     OCLParser parser = new OCLParser(tokens);
     OCLParser.ContextDeclCSContext tree = parser.contextDeclCS();
 
-    if (parser.getNumberOfSyntaxErrors() > 0) return null;
+    if (parser.getNumberOfSyntaxErrors() > 0) {
+      return null;
+    }
 
     // Initialize 3-pass architecture
     SymbolTableImpl symbolTable = new SymbolTableImpl(wrapper);
@@ -98,14 +101,18 @@ public class OCLCompiler {
         new SymbolTableBuilder(symbolTable, wrapper, errors, scopeAnnotator);
     symbolTableBuilder.visit(tree);
 
-    if (errors.hasErrors()) return null;
+    if (errors.hasErrors()) {
+      return null;
+    }
 
     // PASS 2: Type Checking
     TypeCheckVisitor typeChecker =
         new TypeCheckVisitor(symbolTable, wrapper, errors, scopeAnnotator);
     typeChecker.visit(tree);
 
-    if (errors.hasErrors()) return null;
+    if (errors.hasErrors()) {
+      return null;
+    }
 
     // PASS 3: Evaluation
     EvaluationVisitor evaluator =
@@ -163,12 +170,17 @@ public class OCLCompiler {
   }
 
   /**
-   * Compiles constraint from string source with debug output.
+   * Compiles a constraint from a string source.
    *
-   * <p>Prints error messages to stderr after each pass for debugging.
+   * <p>Runs the full 3-pass pipeline (symbol table → type check → evaluation). Returns {@code null}
+   * only if there is a genuine <em>parser-level</em> syntax error (i.e., {@code
+   * parser.getNumberOfSyntaxErrors() > 0}). Pass-1 or Pass-2 errors are recorded in the internal
+   * {@link ErrorCollector} and can be retrieved with {@link #getErrors()}; the method still returns
+   * {@code null} in those cases so that callers can distinguish "evaluated to a value" from "did
+   * not evaluate", but the caller can distinguish the cause via {@link #hasErrors()}.
    *
    * @param oclSource OCL constraint expression
-   * @return Evaluation result, or null if any pass fails
+   * @return evaluation result, or {@code null} if parsing or any pass failed
    */
   public Value compile(String oclSource) {
     CharStream input = CharStreams.fromString(oclSource);
@@ -177,7 +189,9 @@ public class OCLCompiler {
     OCLParser parser = new OCLParser(tokens);
     ParseTree tree = parser.contextDeclCS();
 
+    // Genuine parse error — ANTLR could not build a tree at all
     if (parser.getNumberOfSyntaxErrors() > 0) {
+      errors.add(1, 0, "Syntax error in constraint (parser)", ErrorSeverity.ERROR, "parser");
       return null;
     }
 
@@ -222,7 +236,6 @@ public class OCLCompiler {
           .getErrors()
           .forEach(
               err -> System.err.println("  " + err.getMessage() + " at line " + err.getLine()));
-      return null;
     }
 
     return result;

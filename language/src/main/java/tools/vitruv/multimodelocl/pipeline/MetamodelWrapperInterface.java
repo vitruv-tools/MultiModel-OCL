@@ -72,4 +72,17 @@ public interface MetamodelWrapperInterface {
    * @return The EObject at that index, or null if out of bounds
    */
   EObject getContextObjectByIndex(int index);
+
+  /**
+   * Resolves an EClass by its unqualified short name, searching across all loaded metamodels.
+   *
+   * <p>Used as a fallback when a type annotation in an OCL constraint uses only the class name
+   * without the metamodel qualifier (e.g., {@code Coordinate} instead of {@code cad::Coordinate}).
+   * The first match across all registered packages is returned; if the same short name exists in
+   * multiple metamodels, the result is unspecified and a qualified name should be used instead.
+   *
+   * @param shortName unqualified class name (e.g., {@code "Coordinate"})
+   * @return the matching EClass, or {@code null} if not found in any loaded metamodel
+   */
+  EClass resolveEClassByShortName(String shortName);
 }
