@@ -2324,7 +2324,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
               results.add(wrapValue(item));
             }
           } else {
-            results.add(wrapValue(value));
+            OCLElement wrapped = wrapValue(value);
+            results.add(wrapped);
           }
         }
       }
@@ -2488,6 +2489,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
       return elem.tryGetBool() != null;
     } else if (targetType == Type.DOUBLE) {
       return elem.tryGetDouble() != null;
+    } else if (targetType == Type.FLOAT) {
+      return elem.tryGetFloat() != null || elem.tryGetDouble() != null || elem.tryGetInt() != null;
     }
 
     if (targetType.isMetaclassType()) {
@@ -2523,6 +2526,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
       return elem.tryGetBool() != null;
     } else if (targetType == Type.DOUBLE) {
       return elem.tryGetDouble() != null;
+    } else if (targetType == Type.FLOAT) {
+      return elem.tryGetFloat() != null;
     }
 
     if (targetType.isMetaclassType()) {

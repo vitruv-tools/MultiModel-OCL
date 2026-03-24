@@ -70,7 +70,6 @@ context brakesystem::BrakeDisk inv coordinatesWithinRadius:
             new Path[] {BRAKESYSTEM_INSTANCE, CAD_INSTANCE});
 
     assertTrue(result.isSuccess(), "Evaluation should succeed: " + result.toDetailedErrorString());
-    // x=175 > 165 (radius) → not satisfied
     assertFalse(
         result.isSatisfied(),
         "Constraint should fail: caliper coordinate x=175 exceeds disk radius 165");
@@ -129,10 +128,6 @@ context brakesystem::BrakeDisk inv onlyCoordinates:
         result.isSatisfied(), "Should find exactly 4 Coordinate parameters in caliper namespace");
   }
 
-  /**
-   * Tests that oclIsKindOf includes both Coordinate and NumericParameter (both extend Parameter).
-   * The caliper namespace has 5 parameters total (4 Coordinates + 1 NumericParameter).
-   */
   @Test
   public void testFilterAllParameterSubtypes() throws Exception {
     String constraint =
@@ -191,7 +186,6 @@ context brakesystem::BrakeDisk inv allSubtypes:
             new Path[] {BRAKESYSTEM_INSTANCE, CAD_INSTANCE});
 
     assertTrue(result.isSuccess(), "Evaluation should succeed: " + result.toDetailedErrorString());
-    // x=175 > 165 (radius) → not satisfied
     assertFalse(
         result.isSatisfied(),
         "Constraint should fail: caliper coordinate x=175 exceeds disk radius 165");

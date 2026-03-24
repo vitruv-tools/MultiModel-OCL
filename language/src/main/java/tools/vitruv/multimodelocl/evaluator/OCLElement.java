@@ -32,6 +32,7 @@ public sealed interface OCLElement
         OCLElement.BoolValue,
         OCLElement.StringValue,
         OCLElement.ObjectRef,
+        OCLElement.FloatValue,
         OCLElement.DoubleValue,
         OCLElement.FloatValue,
         OCLElement.EnumValue,
