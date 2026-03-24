@@ -366,7 +366,12 @@ public sealed interface OCLElement
 
     // ── Enum equality ────────────────────────────────────────────────────────
     if (a instanceof EnumValue ea && b instanceof EnumValue eb) {
-      return ea.literal().equals(eb.literal());
+      // Use literal name for equality, not object identity. EEnumLiteral.equals() is
+      // reference equality, so two literals from different EPackages (e.g.
+      // Labelgraph1::Label::ORANGE vs Labelgraph2::Label::ORANGE) would never be equal
+      // even if they represent the same value. Name-based comparison is the correct
+      // cross-metamodel semantics.
+      return ea.literal().getName().equals(eb.literal().getName());
     }
     // EnumValue == StringValue: compare by literal name
     if (a instanceof EnumValue ea && b instanceof StringValue sb) {
