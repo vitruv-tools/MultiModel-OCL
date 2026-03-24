@@ -1,4 +1,4 @@
-/*******************************************************************************
+    /*******************************************************************************
  * Copyright (c) 2026 Max Oesterle
  *
  * This program and the accompanying materials are made available under the
@@ -32,7 +32,6 @@ public sealed interface OCLElement
         OCLElement.BoolValue,
         OCLElement.StringValue,
         OCLElement.ObjectRef,
-        OCLElement.FloatValue,
         OCLElement.DoubleValue,
         OCLElement.FloatValue,
         OCLElement.EnumValue,
