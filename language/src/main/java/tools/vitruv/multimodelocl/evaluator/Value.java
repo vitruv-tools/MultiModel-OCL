@@ -512,4 +512,14 @@ public class Value {
   public static Value metaclassValue(EObject instance, Type type) {
     return singleton(new OCLElement.MetaclassValue(instance), type);
   }
+
+  /** Convenience: Creates double singleton. */
+  public static Value doubleValue(double value) {
+    return singleton(new OCLElement.DoubleValue(value), Type.DOUBLE);
+  }
+
+  /** Convenience: Creates float singleton. */
+  public static Value floatValue(float value) {
+    return singleton(new OCLElement.FloatValue(value), Type.FLOAT);
+  }
 }

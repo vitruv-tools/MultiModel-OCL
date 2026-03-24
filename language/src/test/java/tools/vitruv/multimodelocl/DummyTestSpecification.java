@@ -66,6 +66,11 @@ public abstract class DummyTestSpecification {
           }
 
           @Override
+          public EClass resolveEClassByShortName(String s) {
+            return null;
+          }
+
+          @Override
           public List<EObject> getAllInstances(EClass eClass) {
             return List.of();
           }
@@ -263,6 +268,11 @@ public abstract class DummyTestSpecification {
       @Override
       public List<EObject> getAllInstances(EClass eClass) {
         return List.of();
+      }
+
+      @Override
+      public EClass resolveEClassByShortName(String s) {
+        return null;
       }
 
       @Override

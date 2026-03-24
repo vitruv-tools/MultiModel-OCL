@@ -13,7 +13,7 @@
 package tools.vitruv.multimodelocl.typechecker;
 
 /**
- * Enumeration representing OCL# multiplicities.
+ * Enumeration representing multiplicities.
  *
  * <p>A {@code Multiplicity} describes how many values a typed expression may evaluate to and, in
  * the case of collections, defines ordering and uniqueness properties.
@@ -111,7 +111,7 @@ public enum Multiplicity {
   /**
    * Checks whether this multiplicity conforms to another multiplicity.
    *
-   * <p>The conformance relation follows the OCL# subtyping rules:
+   * <p>The conformance relation follows the subtyping rules:
    *
    * <pre>
    * !T!  &lt;:  ?T?  &lt;:  {T}

@@ -13,12 +13,19 @@
 package tools.vitruv.multimodelocl.evaluator;
 
 import org.eclipse.emf.ecore.EClass;
+import org.eclipse.emf.ecore.EEnumLiteral;
 import org.eclipse.emf.ecore.EObject;
 
 /**
- * OCL Element - represents a single element in an OCL collection.
+ * OCL Element — represents a single element in an OCL collection.
  *
- * <p>This is a sealed interface to ensure exhaustiveness in pattern matching.
+ * <p>This is a sealed interface to ensure exhaustiveness in pattern matching. Numeric types follow
+ * the hierarchy {@code INTEGER ⊂ FLOAT ⊂ DOUBLE}: integer values can be promoted to float or double
+ * for mixed arithmetic and comparison.
+ *
+ * <p>EMF {@code EEnum} attribute values are wrapped as {@link EnumValue} records containing the
+ * {@link EEnumLiteral}. Equality between two enum values uses literal identity; equality between an
+ * enum value and a string uses the literal name.
  */
 public sealed interface OCLElement
     permits OCLElement.IntValue,
@@ -26,6 +33,8 @@ public sealed interface OCLElement
         OCLElement.StringValue,
         OCLElement.ObjectRef,
         OCLElement.DoubleValue,
+        OCLElement.FloatValue,
+        OCLElement.EnumValue,
         OCLElement.NestedCollection,
         OCLElement.MetaclassValue,
         OCLElement.CastedMetaclassValue {
@@ -36,46 +45,60 @@ public sealed interface OCLElement
   }
 
   /**
-   * Try to get boolean value, returns null if not a BoolValue. Avoids instanceof checks in calling
-   * code.
+   * Try to get boolean value; returns {@code null} if not a {@link BoolValue}. Avoids instanceof
+   * checks in calling code.
    */
   default Boolean tryGetBool() {
     return null;
   }
 
   /**
-   * Try to get int value, returns null if not an IntValue. Avoids instanceof checks in calling
-   * code.
+   * Try to get int value; returns {@code null} if not an {@link IntValue}. Avoids instanceof checks
+   * in calling code.
    */
   default Integer tryGetInt() {
     return null;
   }
 
   /**
-   * Try to get string value, returns null if not a StringValue. Avoids instanceof checks in calling
-   * code.
+   * Try to get string value; returns {@code null} if not a {@link StringValue}. Avoids instanceof
+   * checks in calling code.
    */
   default String tryGetString() {
     return null;
   }
 
   /**
-   * Try to get double value, returns null if not a DoubleValue. Avoids instanceof checks in calling
-   * code.
+   * Try to get double value; returns {@code null} if not a {@link DoubleValue}. Avoids instanceof
+   * checks in calling code.
    */
   default Double tryGetDouble() {
     return null;
   }
 
   /**
-   * Try to get EObject instance, returns null if not a MetaclassValue. Avoids instanceof checks in
-   * calling code.
+   * Try to get EObject instance; returns {@code null} if not a {@link MetaclassValue} or {@link
+   * CastedMetaclassValue}. Avoids instanceof checks in calling code.
    */
   default EObject tryGetInstance() {
     return null;
   }
 
-  /** Integer value element. Example: In Set{1, 2, 3}, each number is an IntValue */
+  /**
+   * Promotes this element to a {@code double} for mixed numeric operations. Returns the numeric
+   * value as a {@code double} for {@link IntValue}, {@link FloatValue}, and {@link DoubleValue};
+   * throws {@link UnsupportedOperationException} for all other types.
+   *
+   * @return this element's value as a Java {@code double}
+   * @throws UnsupportedOperationException if the element is not numeric
+   */
+  default double toDoubleValue() {
+    throw new UnsupportedOperationException("Not a numeric element: " + this);
+  }
+
+  // ==================== Concrete value types ====================
+
+  /** Integer value element. Example: {@code 42} in {@code Set{42}}. */
   record IntValue(int value) implements OCLElement {
     @Override
     public String toString() {
@@ -86,9 +109,17 @@ public sealed interface OCLElement
     public Integer tryGetInt() {
       return value;
     }
+
+    @Override
+    public double toDoubleValue() {
+      return value;
+    }
   }
 
-  /** Double value element. */
+  /**
+   * Double (64-bit floating-point) value element. Produced by OCL {@code Real} literals and by
+   * arithmetic that involves at least one {@link DoubleValue} operand.
+   */
   record DoubleValue(double value) implements OCLElement {
     @Override
     public String toString() {
@@ -99,9 +130,37 @@ public sealed interface OCLElement
     public Double tryGetDouble() {
       return value;
     }
+
+    @Override
+    public double toDoubleValue() {
+      return value;
+    }
   }
 
-  /** Boolean value element. Example: In Set{true, false}, each boolean is a BoolValue */
+  /**
+   * Float (32-bit floating-point) value element. Produced when reading EMF {@code EFloat}
+   * attributes (Java {@link Float}). Arithmetic with a {@link DoubleValue} upcasts to {@link
+   * DoubleValue}; arithmetic with an {@link IntValue} stays as {@link FloatValue}.
+   */
+  record FloatValue(float value) implements OCLElement {
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @Override
+    public Double tryGetDouble() {
+      // Expose as double for comparison helpers that only know tryGetDouble()
+      return (double) value;
+    }
+
+    @Override
+    public double toDoubleValue() {
+      return value;
+    }
+  }
+
+  /** Boolean value element. Example: {@code true} in {@code Set{true, false}}. */
   record BoolValue(boolean value) implements OCLElement {
     @Override
     public String toString() {
@@ -114,7 +173,7 @@ public sealed interface OCLElement
     }
   }
 
-  /** String value element. Example: In Set{"hello", "world"}, each string is a StringValue */
+  /** String value element. Example: {@code "hello"} in {@code Set{"hello", "world"}}. */
   record StringValue(String value) implements OCLElement {
     @Override
     public String toString() {
@@ -128,9 +187,38 @@ public sealed interface OCLElement
   }
 
   /**
+   * Enum value element wrapping an EMF {@link EEnumLiteral}. Produced when reading an {@code EEnum}
+   * attribute from an EMF model instance (e.g., {@code Unit.MM}).
+   *
+   * <p>Equality semantics:
+   *
+   * <ul>
+   *   <li>{@code EnumValue == EnumValue} → compare by literal identity ({@code
+   *       EEnumLiteral.equals})
+   *   <li>{@code EnumValue == StringValue} → compare the literal's {@code getName()} to the string
+   * </ul>
+   */
+  record EnumValue(EEnumLiteral literal) implements OCLElement {
+    @Override
+    public String toString() {
+      return literal.getEEnum().getEPackage().getName()
+          + "::"
+          + literal.getEEnum().getName()
+          + "::"
+          + literal.getName();
+    }
+
+    /** Returns the enum literal's name as a string (useful for string comparisons). */
+    @Override
+    public String tryGetString() {
+      return literal.getName();
+    }
+  }
+
+  /**
    * Object reference element (for EObjects from VSUM). Stores the object ID (OID) as a string.
    *
-   * <p>Example: Person objects from a metamodel
+   * <p>Example: {@code Person} objects from a metamodel.
    */
   record ObjectRef(String oid) implements OCLElement {
     @Override
@@ -140,10 +228,9 @@ public sealed interface OCLElement
   }
 
   /**
-   * Nested collection element. Used for nested collection types like Bag{Set{Integer}}.
+   * Nested collection element. Used for nested collection types like {@code Bag{Set{Integer}}}.
    *
-   * <p>Example: - {{int}} (Bag of Sets) - [[int]] (Sequence of Sequences) - {¡int!} (Set of
-   * Singletons)
+   * <p>Example: {@code {{int}}} (Bag of Sets), {@code [[int]]} (Sequence of Sequences).
    */
   record NestedCollection(Value value) implements OCLElement {
     @Override
@@ -154,9 +241,9 @@ public sealed interface OCLElement
 
   /**
    * Metaclass value element (for EObjects from metamodels). Used for cross-metamodel constraints
-   * with ~ operator.
+   * with the {@code ~} operator.
    */
-  record MetaclassValue(org.eclipse.emf.ecore.EObject instance) implements OCLElement {
+  record MetaclassValue(EObject instance) implements OCLElement {
     @Override
     public EClass getEClass() {
       return instance.eClass();
@@ -174,108 +261,14 @@ public sealed interface OCLElement
   }
 
   /**
-   * Compares two OCL elements for semantic equality. Used by merge operations and equality
-   * checking.
-   */
-  static boolean semanticEquals(OCLElement a, OCLElement b) {
-    if (a == null && b == null) return true;
-    if (a == null || b == null) return false;
-
-    // Handle different types
-    if (a instanceof IntValue ia && b instanceof IntValue ib) {
-      return ia.value == ib.value;
-    }
-    if (a instanceof DoubleValue da && b instanceof DoubleValue db) {
-      return da.value == db.value;
-    }
-    // Type coercion: Int == Double
-    if (a instanceof IntValue ia && b instanceof DoubleValue db) {
-      return ia.value == db.value;
-    }
-    if (a instanceof DoubleValue da && b instanceof IntValue ib) {
-      return da.value == ib.value;
-    }
-    if (a instanceof BoolValue ba && b instanceof BoolValue bb) {
-      return ba.value == bb.value;
-    }
-    if (a instanceof StringValue sa && b instanceof StringValue sb) {
-      return sa.value.equals(sb.value);
-    }
-    if (a instanceof ObjectRef oa && b instanceof ObjectRef ob) {
-      return oa.oid.equals(ob.oid);
-    }
-    if (a instanceof NestedCollection na && b instanceof NestedCollection nb) {
-      return Value.semanticEquals(na.value, nb.value);
-    }
-    if (a instanceof MetaclassValue ma && b instanceof MetaclassValue mb) {
-      return ma.instance.equals(mb.instance);
-    }
-    return false;
-  }
-
-  /**
-   * Compares two OCL elements for ordering. Used for normalizing unordered collections (Sets,
-   * Bags).
-   *
-   * <p>Order: Integers &lt; Booleans &lt; Strings &lt; ObjectRefs &lt; NestedCollections
-   */
-  static int compare(OCLElement a, OCLElement b) {
-    if (a == b) return 0;
-    if (a == null) return -1;
-    if (b == null) return 1;
-
-    // First compare by type order
-    int typeA = getTypeOrder(a);
-    int typeB = getTypeOrder(b);
-    if (typeA != typeB) {
-      return Integer.compare(typeA, typeB);
-    }
-
-    // Same type - compare values
-    if (a instanceof IntValue ia && b instanceof IntValue ib) {
-      return Integer.compare(ia.value, ib.value);
-    }
-    if (a instanceof BoolValue ba && b instanceof BoolValue bb) {
-      return Boolean.compare(ba.value, bb.value);
-    }
-    if (a instanceof StringValue sa && b instanceof StringValue sb) {
-      return sa.value.compareTo(sb.value);
-    }
-    if (a instanceof ObjectRef oa && b instanceof ObjectRef ob) {
-      return oa.oid.compareTo(ob.oid);
-    }
-    if (a instanceof NestedCollection na && b instanceof NestedCollection nb) {
-      return Value.compare(na.value, nb.value);
-    }
-    if (a instanceof MetaclassValue ma && b instanceof MetaclassValue mb) {
-      return Integer.compare(
-          System.identityHashCode(ma.instance), System.identityHashCode(mb.instance));
-    }
-
-    return 0;
-  }
-
-  /** Returns a numeric order for element types. Used for sorting heterogeneous collections. */
-  static int getTypeOrder(OCLElement elem) {
-    if (elem instanceof IntValue) return 0;
-    if (elem instanceof BoolValue) return 1;
-    if (elem instanceof StringValue) return 2;
-    if (elem instanceof ObjectRef) return 3;
-    if (elem instanceof MetaclassValue) return 4;
-    if (elem instanceof NestedCollection) return 5;
-    return 6;
-  }
-
-  /**
-   * A metaclass value that has been cast to a specific target type via oclAsType. getEClass()
-   * returns the cast target type, not the runtime type of the instance. This allows property access
-   * on the target type's features after casting.
+   * A metaclass value that has been cast to a specific target type via {@code oclAsType}. {@link
+   * #getEClass()} returns the cast target type, not the runtime type of the instance. This allows
+   * property access on the target type's features after casting.
    */
   record CastedMetaclassValue(EObject instance, EClass castedTo) implements OCLElement {
     @Override
     public EClass getEClass() {
       // Return the cast target type, not instance.eClass()
-      // This ensures property access uses the superclass features
       return castedTo;
     }
 
@@ -293,5 +286,157 @@ public sealed interface OCLElement
     public EObject tryGetInstance() {
       return instance;
     }
+  }
+
+  // ==================== Static helpers ====================
+
+  /**
+   * Returns {@code true} if {@code elem} is any numeric element ({@link IntValue}, {@link
+   * FloatValue}, or {@link DoubleValue}).
+   *
+   * @param elem the element to test
+   * @return {@code true} if numeric
+   */
+  static boolean isNumeric(OCLElement elem) {
+    return elem instanceof IntValue || elem instanceof FloatValue || elem instanceof DoubleValue;
+  }
+
+  /**
+   * Compares two OCL elements for semantic equality.
+   *
+   * <p>Numeric cross-type rules:
+   *
+   * <ul>
+   *   <li>{@code IntValue == IntValue} → integer comparison
+   *   <li>{@code IntValue == FloatValue / DoubleValue} → promote to double
+   *   <li>{@code FloatValue == FloatValue} → float comparison
+   *   <li>{@code FloatValue == DoubleValue} → promote to double
+   *   <li>{@code DoubleValue == DoubleValue} → double comparison
+   * </ul>
+   *
+   * <p>Enum rules:
+   *
+   * <ul>
+   *   <li>{@code EnumValue == EnumValue} → literal identity
+   *   <li>{@code EnumValue == StringValue} → literal name equals string
+   * </ul>
+   *
+   * @param a first element
+   * @param b second element
+   * @return {@code true} if semantically equal
+   */
+  static boolean semanticEquals(OCLElement a, OCLElement b) {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+
+    // ── Numeric cross-type equality ──────────────────────────────────────────
+    if (isNumeric(a) && isNumeric(b)) {
+      return Double.compare(a.toDoubleValue(), b.toDoubleValue()) == 0;
+    }
+
+    // ── Typed comparisons ────────────────────────────────────────────────────
+    if (a instanceof BoolValue ba && b instanceof BoolValue bb) {
+      return ba.value == bb.value;
+    }
+    if (a instanceof StringValue sa && b instanceof StringValue sb) {
+      return sa.value.equals(sb.value);
+    }
+    if (a instanceof ObjectRef oa && b instanceof ObjectRef ob) {
+      return oa.oid.equals(ob.oid);
+    }
+    if (a instanceof NestedCollection na && b instanceof NestedCollection nb) {
+      return Value.semanticEquals(na.value, nb.value);
+    }
+    if (a instanceof MetaclassValue ma && b instanceof MetaclassValue mb) {
+      return ma.instance.equals(mb.instance);
+    }
+
+    // ── Enum equality ────────────────────────────────────────────────────────
+    if (a instanceof EnumValue ea && b instanceof EnumValue eb) {
+      return ea.literal().equals(eb.literal());
+    }
+    // EnumValue == StringValue: compare by literal name
+    if (a instanceof EnumValue ea && b instanceof StringValue sb) {
+      return ea.literal().getName().equals(sb.value());
+    }
+    if (a instanceof StringValue sa && b instanceof EnumValue eb) {
+      return sa.value().equals(eb.literal().getName());
+    }
+
+    return false;
+  }
+
+  /**
+   * Compares two OCL elements for ordering. Used for normalizing unordered collections (Sets, Bags)
+   * and for relational operators ({@code <}, {@code <=}, {@code >}, {@code >=}).
+   *
+   * <p>Ordering: Integers/Floats/Doubles (by numeric value) &lt; Booleans &lt; Strings &lt; Enums
+   * &lt; ObjectRefs &lt; MetaclassValues &lt; NestedCollections.
+   *
+   * @param a first element
+   * @param b second element
+   * @return negative if {@code a < b}, zero if equal, positive if {@code a > b}
+   */
+  static int compare(OCLElement a, OCLElement b) {
+    if (a == b) return 0;
+    if (a == null) return -1;
+    if (b == null) return 1;
+
+    int typeA = getTypeOrder(a);
+    int typeB = getTypeOrder(b);
+    if (typeA != typeB) {
+      // Cross-numeric comparison: promote both to double
+      if (isNumeric(a) && isNumeric(b)) {
+        return Double.compare(a.toDoubleValue(), b.toDoubleValue());
+      }
+      return Integer.compare(typeA, typeB);
+    }
+
+    // Same type bucket
+    if (isNumeric(a) && isNumeric(b)) {
+      return Double.compare(a.toDoubleValue(), b.toDoubleValue());
+    }
+    if (a instanceof BoolValue ba && b instanceof BoolValue bb) {
+      return Boolean.compare(ba.value, bb.value);
+    }
+    if (a instanceof StringValue sa && b instanceof StringValue sb) {
+      return sa.value.compareTo(sb.value);
+    }
+    if (a instanceof EnumValue ea && b instanceof EnumValue eb) {
+      return Integer.compare(ea.literal().getValue(), eb.literal().getValue());
+    }
+    if (a instanceof ObjectRef oa && b instanceof ObjectRef ob) {
+      return oa.oid.compareTo(ob.oid);
+    }
+    if (a instanceof NestedCollection na && b instanceof NestedCollection nb) {
+      return Value.compare(na.value, nb.value);
+    }
+    if (a instanceof MetaclassValue ma && b instanceof MetaclassValue mb) {
+      return Integer.compare(
+          System.identityHashCode(ma.instance), System.identityHashCode(mb.instance));
+    }
+
+    return 0;
+  }
+
+  /**
+   * Returns a numeric ordering bucket for element types. All numeric types share bucket 0 so that
+   * cross-type numeric comparison falls into the same bucket path.
+   *
+   * @param elem the element to classify
+   * @return bucket index
+   */
+  static int getTypeOrder(OCLElement elem) {
+    // All numeric types share bucket 0 for cross-type comparison
+    if (elem instanceof IntValue) return 0;
+    if (elem instanceof FloatValue) return 0;
+    if (elem instanceof DoubleValue) return 0;
+    if (elem instanceof BoolValue) return 1;
+    if (elem instanceof StringValue) return 2;
+    if (elem instanceof EnumValue) return 3;
+    if (elem instanceof ObjectRef) return 4;
+    if (elem instanceof MetaclassValue) return 5;
+    if (elem instanceof NestedCollection) return 6;
+    return 7;
   }
 }

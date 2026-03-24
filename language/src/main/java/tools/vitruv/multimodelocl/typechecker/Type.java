@@ -592,12 +592,20 @@ public abstract class Type {
       if (other == ERROR) return true;
       if (other == ANY) return true;
 
-      // Singleton conforms to its unwrapped element type
-      if (this.isSingleton() && this.elementType.equals(other)) {
+      // ── Singleton unwrapping rules ──────────────────────────────────────────
+      // 1. Singleton!T! conforms to its bare element type T
+      //    e.g.: !Integer! conforms to Integer
+      if (this.isSingleton() && this.elementType.isConformantTo(other)) {
         return true;
       }
 
-      // Collection conformance: both element type and multiplicity must conform
+      // 2. Singleton!Metaclass! conforms to Metaclass (without wrapping)
+      if (this.isSingleton() && other.isMetaclassType() && this.elementType.isMetaclassType()) {
+        // delegate to MetaclassType's own conformance (handles inheritance)
+        return this.elementType.isConformantTo(other);
+      }
+
+      // ── Collection-to-collection conformance ────────────────────────────────
       if (other instanceof CollectionType otherColl) {
         if (!this.elementType.isConformantTo(otherColl.elementType)) {
           return false;

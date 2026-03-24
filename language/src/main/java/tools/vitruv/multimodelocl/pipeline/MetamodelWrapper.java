@@ -301,4 +301,49 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
     }
     return roots;
   }
+
+  /**
+   * Resolves an EClass by its unqualified short name across all registered metamodel packages.
+   *
+   * <p>Iterates all loaded {@link EPackage}s and returns the first {@link EClassifier} whose name
+   * equals {@code shortName} and which is an {@link EClass}. Subpackages are also searched one
+   * level deep.
+   *
+   * @param shortName the unqualified class name (e.g., {@code "Coordinate"})
+   * @return the first matching {@link EClass}, or {@code null} if not found
+   */
+  @Override
+  public EClass resolveEClassByShortName(String shortName) {
+    for (EPackage ePackage : metamodelRegistry.values()) {
+      EClass found = resolveEClassInPackage(ePackage, shortName);
+      if (found != null) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Searches {@code ePackage} and its direct subpackages for an {@link EClass} with the given short
+   * name.
+   *
+   * @param ePackage the package to search
+   * @param shortName the unqualified class name
+   * @return the matching {@link EClass}, or {@code null}
+   */
+  private EClass resolveEClassInPackage(EPackage ePackage, String shortName) {
+    // Search classifiers in this package
+    EClassifier classifier = ePackage.getEClassifier(shortName);
+    if (classifier instanceof EClass eClass) {
+      return eClass;
+    }
+    // Recurse into sub-packages (one level — sufficient for standard Ecore layouts)
+    for (EPackage subPkg : ePackage.getESubpackages()) {
+      EClassifier subClassifier = subPkg.getEClassifier(shortName);
+      if (subClassifier instanceof EClass eClass) {
+        return eClass;
+      }
+    }
+    return null;
+  }
 }
