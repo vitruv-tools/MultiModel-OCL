@@ -23,11 +23,14 @@ import tools.vitruv.multimodelocl.evaluator.OCLElement;
 import tools.vitruv.multimodelocl.evaluator.Value;
 
 /**
- * Comprehensive test suite for arithmetic and comparison operations in VitruvOCL.
+ * Comprehensive test suite for arithmetic and comparison operations in
+ * VitruvOCL.
  *
  * @see Value Runtime value representation
- * @see tools.vitruv.multimodelocl.evaluator.EvaluationVisitor Evaluates arithmetic expressions
- * @see tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor Type checks arithmetic expressions
+ * @see tools.vitruv.multimodelocl.evaluator.EvaluationVisitor Evaluates
+ *      arithmetic expressions
+ * @see tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor Type checks
+ *      arithmetic expressions
  */
 public class SimpleMathTest extends DummyTestSpecification {
 
@@ -63,7 +66,10 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleInt(compile("10+20-5"), 25);
   }
 
-  /** Tests operator precedence: {@code 2+3*4} → {@code [14]} (multiplication first). */
+  /**
+   * Tests operator precedence: {@code 2+3*4} → {@code [14]} (multiplication
+   * first).
+   */
   @Test
   public void testOperatorPrecedence() {
     assertSingleInt(compile("2+3*4"), 14);
@@ -95,7 +101,9 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleBool(compile("5 < 3"), false);
   }
 
-  /** Tests less-than-or-equal (equality case): {@code 3 <= 3} → {@code [true]}. */
+  /**
+   * Tests less-than-or-equal (equality case): {@code 3 <= 3} → {@code [true]}.
+   */
   @Test
   public void testLessThanOrEqual() {
     assertSingleBool(compile("3 <= 3"), true);
@@ -107,13 +115,17 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleBool(compile("10 > 5"), true);
   }
 
-  /** Tests greater-than-or-equal (equality case): {@code 5 >= 5} → {@code [true]}. */
+  /**
+   * Tests greater-than-or-equal (equality case): {@code 5 >= 5} → {@code [true]}.
+   */
   @Test
   public void testGreaterThanOrEqual() {
     assertSingleBool(compile("5 >= 5"), true);
   }
 
-  /** Tests real division in comparison: {@code 331/2 <= 165} → {@code [false]}. */
+  /**
+   * Tests real division in comparison: {@code 331/2 <= 165} → {@code [false]}.
+   */
   @Test
   public void testRealDivisionInComparison() {
     assertSingleBool(compile("331/2 <= 165"), false);
@@ -161,6 +173,13 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleInt(compile("Set{-5,-10,-1}.max()"), -1);
   }
 
+  /** Tests max() on Real collections. */
+  @Test
+  public void testMaxReal() {
+    assertSingleReal(compile("Bag{1.5, 3.0, 2.7}.max()"), 3.0);
+    assertSingleReal(compile("Sequence{-1.1, -0.5, -2.8}.max()"), -0.5);
+  }
+
   /** Tests max() on empty collection → empty. */
   @Test
   public void testMaxEmptyCollection() {
@@ -173,6 +192,13 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleInt(compile("Set{1,5,3,9,2}.min()"), 1);
     assertSingleInt(compile("Sequence{100,50,200,75}.min()"), 50);
     assertSingleInt(compile("Set{-5,-10,-1}.min()"), -10);
+  }
+
+  /** Tests min() on Real collections. */
+  @Test
+  public void testMinReal() {
+    assertSingleReal(compile("Bag{1.5, 3.0, 2.7}.min()"), 1.5);
+    assertSingleReal(compile("Sequence{-1.1, -0.5, -2.8}.min()"), -2.8);
   }
 
   /** Tests min() on empty collection → empty. */
@@ -224,7 +250,10 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertCollection(compile("Sequence{10,20,30}.round()"), 10, 20, 30);
   }
 
-  /** Tests lift(): {@code Set{1,2,3}.lift()} → singleton containing collection of size 3. */
+  /**
+   * Tests lift(): {@code Set{1,2,3}.lift()} → singleton containing collection of
+   * size 3.
+   */
   @Test
   public void testLift() {
     Value result = compile("Set{1,2,3}.lift()");
@@ -260,7 +289,10 @@ public class SimpleMathTest extends DummyTestSpecification {
 
   // ==================== Entry Point Override ====================
 
-  /** Overrides parse entry point to use {@code infixedExpCS()} for arithmetic expressions. */
+  /**
+   * Overrides parse entry point to use {@code infixedExpCS()} for arithmetic
+   * expressions.
+   */
   @Override
   protected ParseTree parse(String input) {
     CommonTokenStream tokens = new CommonTokenStream(new OCLLexer(CharStreams.fromString(input)));
