@@ -1745,7 +1745,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
    * <p>Numeric promotion (INTEGER ⊂ FLOAT ⊂ DOUBLE):
    *
    * <ul>
-   *   <li>Both operands INTEGER → integer arithmetic
+   *   <li>Both operands INTEGER with {@code *} → integer arithmetic
+   *   <li>Both operands INTEGER with {@code /} → real arithmetic (DOUBLE)
    *   <li>Either operand FLOAT (and neither DOUBLE) → float arithmetic
    *   <li>Either operand DOUBLE → double arithmetic
    * </ul>
@@ -1776,7 +1777,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
       if (operator.equals("/") && rightInt == 0) {
         return error("Integer division by zero", ctx);
       }
-      int result = operator.equals("*") ? leftInt * rightInt : leftInt / rightInt;
+      if (operator.equals("/")) {
+        return Value.doubleValue(((double) leftInt) / rightInt);
+      }
+      int result = leftInt * rightInt;
       return Value.intValue(result);
     }
 

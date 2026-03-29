@@ -12,7 +12,8 @@
  *******************************************************************************/
 package tools.vitruv.multimodelocl;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -50,10 +51,10 @@ public class SimpleMathTest extends DummyTestSpecification {
     assertSingleInt(compile("4*5"), 20);
   }
 
-  /** Tests division: {@code 20/4} → {@code [5]}. */
+  /** Tests division: {@code 20/4} → {@code [5.0]} (Real result). */
   @Test
   public void testDivision() {
-    assertSingleInt(compile("20/4"), 5);
+    assertSingleReal(compile("20/4"), 5.0);
   }
 
   /** Tests chained operations: {@code 10+20-5} → {@code [25]}. */
@@ -110,6 +111,12 @@ public class SimpleMathTest extends DummyTestSpecification {
   @Test
   public void testGreaterThanOrEqual() {
     assertSingleBool(compile("5 >= 5"), true);
+  }
+
+  /** Tests real division in comparison: {@code 331/2 <= 165} → {@code [false]}. */
+  @Test
+  public void testRealDivisionInComparison() {
+    assertSingleBool(compile("331/2 <= 165"), false);
   }
 
   /** Tests equality (true): {@code 5 == 5} → {@code [true]}. */
@@ -248,7 +255,7 @@ public class SimpleMathTest extends DummyTestSpecification {
   public void testComplexArithmetic() {
     assertSingleInt(compile("Set{-5,-10,15,20}.abs().max()"), 20);
     assertSingleInt(compile("Set{-1,-2,-3}.abs().sum()"), 6);
-    assertSingleInt(compile("Sequence{5,10,15,20}.sum() / Set{2,4}.max()"), 12);
+    assertSingleReal(compile("Sequence{5,10,15,20}.sum() / Set{2,4}.max()"), 12.5);
   }
 
   // ==================== Entry Point Override ====================

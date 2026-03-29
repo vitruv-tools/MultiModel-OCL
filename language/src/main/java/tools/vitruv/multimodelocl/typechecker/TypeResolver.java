@@ -111,7 +111,8 @@ public class TypeResolver {
 
     if (leftType == Type.ANY || rightType == Type.ANY) {
       return switch (operator) {
-        case "+", "-", "*", "/" -> Type.INTEGER;
+        case "+", "-", "*" -> Type.INTEGER;
+        case "/" -> Type.DOUBLE;
         case "and", "or", "xor", "implies" -> Type.BOOLEAN;
         case "<", "<=", ">", ">=", "==", "!=" -> Type.BOOLEAN;
         default -> Type.ERROR;
@@ -148,7 +149,8 @@ public class TypeResolver {
     // Re-check ANY after unwrapping (element may be ANY)
     if (leftType == Type.ANY || rightType == Type.ANY) {
       return switch (operator) {
-        case "+", "-", "*", "/" -> Type.INTEGER;
+        case "+", "-", "*" -> Type.INTEGER;
+        case "/" -> Type.DOUBLE;
         case "and", "or", "xor", "implies" -> Type.BOOLEAN;
         case "<", "<=", ">", ">=", "==", "!=" -> Type.BOOLEAN;
         default -> Type.ERROR;
@@ -161,6 +163,16 @@ public class TypeResolver {
         || operator.equals("*")
         || operator.equals("/")) {
       if (isNumeric(leftType) && isNumeric(rightType)) {
+        if (operator.equals("/")) {
+          // OCL division returns Real; integer division must not truncate to Integer.
+          if (leftType == Type.DOUBLE || rightType == Type.DOUBLE) {
+            return Type.DOUBLE;
+          }
+          if (leftType == Type.FLOAT || rightType == Type.FLOAT) {
+            return Type.FLOAT;
+          }
+          return Type.DOUBLE;
+        }
         return widenNumeric(leftType, rightType);
       }
       return Type.ERROR;
@@ -365,26 +377,26 @@ public class TypeResolver {
   public static boolean isCollectionOperation(String operationName) {
     return switch (operationName) {
       case "includes",
-              "excludes",
-              "isEmpty",
-              "notEmpty",
-              "size",
-              "including",
-              "excluding",
-              "select",
-              "reject",
-              "collect",
-              "first",
-              "last",
-              "any",
-              "union",
-              "intersection",
-              "flatten",
-              "sum",
-              "asSet",
-              "asSequence",
-              "asBag",
-              "asOrderedSet" ->
+          "excludes",
+          "isEmpty",
+          "notEmpty",
+          "size",
+          "including",
+          "excluding",
+          "select",
+          "reject",
+          "collect",
+          "first",
+          "last",
+          "any",
+          "union",
+          "intersection",
+          "flatten",
+          "sum",
+          "asSet",
+          "asSequence",
+          "asBag",
+          "asOrderedSet" ->
           true;
       default -> false;
     };
