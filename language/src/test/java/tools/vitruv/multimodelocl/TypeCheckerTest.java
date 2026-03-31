@@ -12,7 +12,10 @@
  *******************************************************************************/
 package tools.vitruv.multimodelocl;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -111,7 +114,7 @@ public class TypeCheckerTest extends DummyTestSpecification {
   @Test
   public void testIntegerDivisionType() {
     Type type = getType("20 / 4");
-    assertEquals(Type.INTEGER, type);
+    assertEquals(Type.DOUBLE, type);
   }
 
   @Test
@@ -804,7 +807,7 @@ public class TypeCheckerTest extends DummyTestSpecification {
   public void testDivisionByZeroType() {
     // Type checking doesn't catch runtime errors, should type correctly
     Type type = getType("10 / 0");
-    assertEquals(Type.INTEGER, type);
+    assertEquals(Type.DOUBLE, type);
   }
 
   @Test
@@ -1138,7 +1141,7 @@ public class TypeCheckerTest extends DummyTestSpecification {
   @Test
   public void testParenthesizedArithmeticComplexType() {
     Type type = getType("((5 + 3) * 2) - ((10 / 2) + 1)");
-    assertEquals(Type.INTEGER, type);
+    assertEquals(Type.DOUBLE, type);
   }
 
   // ==================== Helper Methods ====================

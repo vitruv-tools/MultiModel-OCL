@@ -14,16 +14,19 @@ package tools.vitruv.multimodelocl;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.List;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import tools.vitruv.multimodelocl.common.ErrorCollector;
 import tools.vitruv.multimodelocl.evaluator.OCLElement;
 import tools.vitruv.multimodelocl.evaluator.Value;
 import tools.vitruv.multimodelocl.pipeline.ConstraintResult;
+import tools.vitruv.multimodelocl.pipeline.MetamodelWrapper;
 import tools.vitruv.multimodelocl.pipeline.MetamodelWrapperInterface;
 import tools.vitruv.multimodelocl.pipeline.MultiModelOCLInterface;
 import tools.vitruv.multimodelocl.symboltable.ScopeAnnotator;
@@ -34,25 +37,33 @@ import tools.vitruv.multimodelocl.typechecker.Type;
 import tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor;
 
 /**
- * Comprehensive test suite for the {@code oclIsTypeOf} type checking operation in VitruvOCL.
+ * Comprehensive test suite for the {@code oclIsTypeOf} type checking operation
+ * in VitruvOCL.
  *
- * <p>Unlike {@code oclIsKindOf}, {@code oclIsTypeOf} checks for exact type match (no subtype
+ * <p>
+ * Unlike {@code oclIsKindOf}, {@code oclIsTypeOf} checks for exact type match
+ * (no subtype
  * inheritance).
  *
  * @see Value Runtime collection representation
- * @see tools.vitruv.multimodelocl.evaluator.EvaluationVisitor Evaluates oclIsTypeOf operations
- * @see tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor Type checks oclIsTypeOf expressions
+ * @see tools.vitruv.multimodelocl.evaluator.EvaluationVisitor Evaluates
+ *      oclIsTypeOf operations
+ * @see tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor Type checks
+ *      oclIsTypeOf expressions
  */
 public class OCLIsTypeOfTest extends DummyTestSpecification {
 
-  private static final Path SPACEMISSION_ECORE =
-      Path.of("src/test/resources/test-metamodels/spaceMission.ecore");
-  private static final Path SATELLITE_ECORE =
-      Path.of("src/test/resources/test-metamodels/satelliteSystem.ecore");
+  private static final Path SPACEMISSION_ECORE = Path.of("src/test/resources/test-metamodels/spaceMission.ecore");
+  private static final Path SATELLITE_ECORE = Path.of("src/test/resources/test-metamodels/satelliteSystem.ecore");
 
   private static final Path SPACECRAFT_VOYAGER = Path.of("spacecraft-voyager.spacemission");
   private static final Path SPACECRAFT_ATLAS = Path.of("spacecraft-atlas.spacemission");
   private static final Path SATELLITE_VOYAGER = Path.of("satellite-voyager.satellitesystem");
+
+  @BeforeAll
+  public static void setupPaths() {
+    MetamodelWrapper.TEST_MODELS_PATH = Path.of("src/test/resources/test-models");
+  }
 
   // ==================== Integer Type Checking ====================
 
@@ -116,7 +127,10 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
 
   // ==================== Multiple Elements ====================
 
-  /** Tests all Integer elements → all true: {@code Set{1,2,3}.oclIsTypeOf(Integer)}. */
+  /**
+   * Tests all Integer elements → all true:
+   * {@code Set{1,2,3}.oclIsTypeOf(Integer)}.
+   */
   @Test
   public void testMultipleIntegersIsTypeOfInteger() {
     Value result = compile("Set{1, 2, 3}.oclIsTypeOf(Integer)");
@@ -146,7 +160,9 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
     }
   }
 
-  /** Tests Boolean Set with duplicates: {true,false,true} → 2 elements, both true. */
+  /**
+   * Tests Boolean Set with duplicates: {true,false,true} → 2 elements, both true.
+   */
   @Test
   public void testMultipleBooleansIsTypeOfBoolean() {
     Value result = compile("Set{true, false, true}.oclIsTypeOf(Boolean)");
@@ -166,7 +182,10 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
 
   // ==================== Sequence Preservation ====================
 
-  /** Tests Sequence order preserved: {@code Sequence{1,2,3}.oclIsTypeOf(Integer)} → all true. */
+  /**
+   * Tests Sequence order preserved: {@code Sequence{1,2,3}.oclIsTypeOf(Integer)}
+   * → all true.
+   */
   @Test
   public void testSequencePreservesOrder() {
     Value result = compile("Sequence{1, 2, 3}.oclIsTypeOf(Integer)");
@@ -190,8 +209,7 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
     new SymbolTableBuilder(symbolTable, dummySpec, errors, scopeAnnotator).visit(tree);
     assertFalse(errors.hasErrors(), "Pass 1 should not have errors");
 
-    TypeCheckVisitor typeChecker =
-        new TypeCheckVisitor(symbolTable, dummySpec, errors, scopeAnnotator);
+    TypeCheckVisitor typeChecker = new TypeCheckVisitor(symbolTable, dummySpec, errors, scopeAnnotator);
     Type resultType = typeChecker.visit(tree);
 
     assertFalse(typeChecker.hasErrors());
@@ -211,8 +229,7 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
     new SymbolTableBuilder(symbolTable, dummySpec, errors, scopeAnnotator).visit(tree);
     assertFalse(errors.hasErrors(), "Pass 1 should not have errors");
 
-    TypeCheckVisitor typeChecker =
-        new TypeCheckVisitor(symbolTable, dummySpec, errors, scopeAnnotator);
+    TypeCheckVisitor typeChecker = new TypeCheckVisitor(symbolTable, dummySpec, errors, scopeAnnotator);
     Type resultType = typeChecker.visit(tree);
 
     assertFalse(typeChecker.hasErrors());
@@ -223,7 +240,10 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
 
   // ==================== Mixed Type Collections ====================
 
-  /** Tests mixed types checking for Integer: {1,"hello",true} → {true,false,false}. */
+  /**
+   * Tests mixed types checking for Integer: {1,"hello",true} →
+   * {true,false,false}.
+   */
   @Test
   public void testMixedTypesInCollection() {
     Value result = compile("Sequence{1, \"hello\", true}.oclIsTypeOf(Integer)");
@@ -234,7 +254,10 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
     assertFalse(((OCLElement.BoolValue) elements.get(2)).value());
   }
 
-  /** Tests mixed types checking for String: {1,"hello",true,"world"} → {false,true,false,true}. */
+  /**
+   * Tests mixed types checking for String: {1,"hello",true,"world"} →
+   * {false,true,false,true}.
+   */
   @Test
   public void testMixedTypesCheckingForString() {
     Value result = compile("Sequence{1, \"hello\", true, \"world\"}.oclIsTypeOf(String)");
@@ -253,7 +276,8 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
     assertSize(result, 3);
     int trueCount = 0;
     for (OCLElement elem : result.getElements()) {
-      if (((OCLElement.BoolValue) elem).value()) trueCount++;
+      if (((OCLElement.BoolValue) elem).value())
+        trueCount++;
     }
     assertEquals(1, trueCount, "Exactly one element should be Boolean");
   }
@@ -274,10 +298,9 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
    */
   @Test
   public void testNestedCollectionsWithMixedTypes() {
-    Value result =
-        compile(
-            "Sequence{Set{1, 2}, Set{\"a\", \"b\"}, Set{true,"
-                + " false}}.flatten().oclIsTypeOf(Integer)");
+    Value result = compile(
+        "Sequence{Set{1, 2}, Set{\"a\", \"b\"}, Set{true,"
+            + " false}}.flatten().oclIsTypeOf(Integer)");
     assertSize(result, 6);
     List<OCLElement> elements = result.getElements();
     assertTrue(((OCLElement.BoolValue) elements.get(0)).value());
@@ -293,36 +316,35 @@ public class OCLIsTypeOfTest extends DummyTestSpecification {
   /** Tests Spacecraft instance is exactly of type Spacecraft → {@code [true]}. */
   @Test
   public void testSpacecraftIsTypeOfSpacecraft() throws Exception {
-    String constraint =
-        """
-context spaceMission::Spacecraft inv typeOfSpacecraft:
-  spaceMission::Spacecraft.allInstances().oclIsTypeOf(spaceMission::Spacecraft).forAll(b | b)
-""";
+    String constraint = """
+        context spaceMission::Spacecraft inv typeOfSpacecraft:
+          spaceMission::Spacecraft.allInstances().oclIsTypeOf(spaceMission::Spacecraft).forAll(b | b)
+        """;
 
-    ConstraintResult result =
-        MultiModelOCLInterface.evaluateConstraint(
-            constraint,
-            new Path[] {SPACEMISSION_ECORE, SATELLITE_ECORE},
-            new Path[] {SPACECRAFT_VOYAGER, SATELLITE_VOYAGER});
+    ConstraintResult result = MultiModelOCLInterface.evaluateConstraint(
+        constraint,
+        new Path[] { SPACEMISSION_ECORE, SATELLITE_ECORE },
+        new Path[] { SPACECRAFT_VOYAGER, SATELLITE_VOYAGER });
 
     assertTrue(result.isSuccess(), "Evaluation should succeed");
     assertTrue(result.isSatisfied(), "Spacecraft instances should be exactly of type Spacecraft");
   }
 
-  /** Tests Spacecraft instance is NOT exactly of type Satellite → all false, constraint fails. */
+  /**
+   * Tests Spacecraft instance is NOT exactly of type Satellite → all false,
+   * constraint fails.
+   */
   @Test
   public void testSpacecraftIsNotTypeOfSatellite() throws Exception {
-    String constraint =
-        """
-context spaceMission::Spacecraft inv typeOfSatellite:
-  spaceMission::Spacecraft.allInstances().oclIsTypeOf(satelliteSystem::Satellite).forAll(b | b)
-""";
+    String constraint = """
+        context spaceMission::Spacecraft inv typeOfSatellite:
+          spaceMission::Spacecraft.allInstances().oclIsTypeOf(satelliteSystem::Satellite).forAll(b | b)
+        """;
 
-    ConstraintResult result =
-        MultiModelOCLInterface.evaluateConstraint(
-            constraint,
-            new Path[] {SPACEMISSION_ECORE, SATELLITE_ECORE},
-            new Path[] {SPACECRAFT_VOYAGER, SATELLITE_VOYAGER});
+    ConstraintResult result = MultiModelOCLInterface.evaluateConstraint(
+        constraint,
+        new Path[] { SPACEMISSION_ECORE, SATELLITE_ECORE },
+        new Path[] { SPACECRAFT_VOYAGER, SATELLITE_VOYAGER });
 
     assertTrue(result.isSuccess(), "Evaluation should succeed");
     assertFalse(result.isSatisfied(), "Spacecraft is not of type Satellite");
@@ -331,41 +353,38 @@ context spaceMission::Spacecraft inv typeOfSatellite:
   /** Tests Satellite instances are exactly of type Satellite → all true. */
   @Test
   public void testSatelliteIsTypeOfSatellite() throws Exception {
-    String constraint =
-        """
-context satelliteSystem::Satellite inv typeOfSatellite:
-  satelliteSystem::Satellite.allInstances().oclIsTypeOf(satelliteSystem::Satellite).forAll(b | b)
-""";
+    String constraint = """
+        context satelliteSystem::Satellite inv typeOfSatellite:
+          satelliteSystem::Satellite.allInstances().oclIsTypeOf(satelliteSystem::Satellite).forAll(b | b)
+        """;
 
-    ConstraintResult result =
-        MultiModelOCLInterface.evaluateConstraint(
-            constraint,
-            new Path[] {SPACEMISSION_ECORE, SATELLITE_ECORE},
-            new Path[] {SPACECRAFT_VOYAGER, SATELLITE_VOYAGER});
+    ConstraintResult result = MultiModelOCLInterface.evaluateConstraint(
+        constraint,
+        new Path[] { SPACEMISSION_ECORE, SATELLITE_ECORE },
+        new Path[] { SPACECRAFT_VOYAGER, SATELLITE_VOYAGER });
 
     assertTrue(result.isSuccess(), "Evaluation should succeed");
     assertTrue(result.isSatisfied(), "Satellite instances should be exactly of type Satellite");
   }
 
   /**
-   * Tests mixed allInstances() results filtered by oclIsTypeOf. Only Spacecraft instances should
+   * Tests mixed allInstances() results filtered by oclIsTypeOf. Only Spacecraft
+   * instances should
    * pass oclIsTypeOf(Spacecraft).
    */
   @Test
   public void testOclIsTypeOfUsedInSelect() throws Exception {
-    String constraint =
-        """
+    String constraint = """
         context spaceMission::Spacecraft inv typeOfInSelect:
           spaceMission::Spacecraft.allInstances().select(sc |
             sc.oclIsTypeOf(spaceMission::Spacecraft)
           ).size() > 0
         """;
 
-    ConstraintResult result =
-        MultiModelOCLInterface.evaluateConstraint(
-            constraint,
-            new Path[] {SPACEMISSION_ECORE, SATELLITE_ECORE},
-            new Path[] {SPACECRAFT_VOYAGER, SPACECRAFT_ATLAS, SATELLITE_VOYAGER});
+    ConstraintResult result = MultiModelOCLInterface.evaluateConstraint(
+        constraint,
+        new Path[] { SPACEMISSION_ECORE, SATELLITE_ECORE },
+        new Path[] { SPACECRAFT_VOYAGER, SPACECRAFT_ATLAS, SATELLITE_VOYAGER });
 
     assertTrue(result.isSuccess(), "Evaluation should succeed");
     assertTrue(result.isSatisfied(), "Should find Spacecraft instances via oclIsTypeOf");
@@ -383,22 +402,29 @@ context satelliteSystem::Satellite inv typeOfSatellite:
   }
 
   /**
-   * Tests oclIsTypeOf as select predicate followed by size(). Mirrors the brakedisk pattern:
+   * Tests oclIsTypeOf as select predicate followed by size(). Mirrors the
+   * brakedisk pattern:
    * collection.select(p | p.oclIsTypeOf(T)).size() > 0
    */
   @Test
   public void testOclIsTypeOfSelectThenSize() {
-    Value result =
-        compile("Sequence{1, \"hello\", true, 2}.select(p | p.oclIsTypeOf(Integer)).size()");
+    Value result = compile("Sequence{1, \"hello\", true, 2}.select(p | p.oclIsTypeOf(Integer)).size()");
     assertSingleInt(result, 2);
   }
 
   // ==================== Entry Point Override ====================
 
-  /** Overrides parse entry point to use {@code infixedExpCS()} for oclIsTypeOf expressions. */
+  /**
+   * Overrides parse entry point to use {@code infixedExpCS()} for oclIsTypeOf
+   * expressions.
+   */
   @Override
   protected ParseTree parse(String input) {
     CommonTokenStream tokens = new CommonTokenStream(new OCLLexer(CharStreams.fromString(input)));
     return new OCLParser(tokens).infixedExpCS();
+  }
+
+  private static Path resourcePath(String name) throws URISyntaxException {
+    return Path.of(OCLIsTypeOfTest.class.getClassLoader().getResource(name).toURI());
   }
 }
