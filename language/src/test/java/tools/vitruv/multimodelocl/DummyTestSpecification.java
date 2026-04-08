@@ -186,6 +186,22 @@ public abstract class DummyTestSpecification {
   }
 
   /**
+   * Asserts that the result is a singleton containing a single real value (Double or Float).
+   *
+   * @param result The evaluated collection value
+   * @param expected The expected numeric value
+   */
+  protected void assertSingleReal(Value result, double expected) {
+    assertEquals(1, result.size(), "Expected singleton result");
+    OCLElement element = result.getElements().get(0);
+    Double actual = element.tryGetDouble();
+    if (actual == null) {
+      fail("Expected real value but got " + element.getClass().getSimpleName());
+    }
+    assertEquals(expected, actual, 1e-9, "Expected real value " + expected);
+  }
+
+  /**
    * Asserts that the result collection includes the given integer element.
    *
    * @param result The evaluated collection value
