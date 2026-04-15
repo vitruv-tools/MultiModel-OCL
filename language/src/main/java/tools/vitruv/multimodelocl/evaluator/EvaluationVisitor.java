@@ -681,7 +681,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
         if (val == null) {
           return error("min() requires numeric elements", ctx);
         }
-        if (val < min) min = val;
+        if (val < min) {
+          min = val;
+        }
       }
       return Value.doubleValue(min);
     }
@@ -691,7 +693,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
       if (val == null) {
         return error("min() requires numeric elements", ctx);
       }
-      if (val < min) min = val;
+      if (val < min) {
+        min = val;
+      }
     }
     return Value.intValue(min);
   }
