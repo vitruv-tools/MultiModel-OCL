@@ -1,12 +1,11 @@
-/*******************************************************************************
+/*******************************************************************************.
  * Copyright (c) 2026 Max Oesterle
- *
  * This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License 2.0 which is available at
  * https://www.eclipse.org/legal/epl-2.0/
- *
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
+
 package tools.vitruv.multimodelocl;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -96,7 +95,7 @@ public class CollectionChainingTest extends DummyTestSpecification {
   }
 
   @Test
-  public void testSelectThenFlatten_typeError() {
+  public void testSelectThenFlattentypeError() {
     // select() on Set{Integer} → Set{Integer}; flatten() on flat collection is a type error
     assertTypeError("Set{1,2,3}.select(x | x > 1).flatten()");
   }
@@ -178,17 +177,17 @@ public class CollectionChainingTest extends DummyTestSpecification {
   // only if the element type is itself a collection. We test flatten on valid chaining instead.
 
   @Test
-  public void testFlattenThenSelect_typeError() {
+  public void testFlattenThenSelecttypeError() {
     assertTypeError("Set{1,2,3}.flatten().select(x | x > 1)");
   }
 
   @Test
-  public void testFlattenThenSize_typeError() {
+  public void testFlattenThenSizetypeError() {
     assertTypeError("Set{1,2,3}.flatten().size()");
   }
 
   @Test
-  public void testFlattenThenCollect_typeError() {
+  public void testFlattenThenCollecttypeError() {
     assertTypeError("Set{1,2,3}.flatten().collect(x | x * 2)");
   }
 

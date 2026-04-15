@@ -1,12 +1,11 @@
-/*******************************************************************************
+/*******************************************************************************.
  * Copyright (c) 2026 Max Oesterle
- *
  * This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License 2.0 which is available at
  * https://www.eclipse.org/legal/epl-2.0/
- *
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
+
 package tools.vitruv.multimodelocl;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -239,17 +238,17 @@ public class ComparisonTypeMatrixTest extends DummyTestSpecification {
   // ==================== <= ====================
 
   @Test
-  public void testIntLessOrEqualInt_equal() {
+  public void testIntLessOrEqualIntequal() {
     assertSingleBool(compile("3 <= 3"), true);
   }
 
   @Test
-  public void testIntLessOrEqualInt_less() {
+  public void testIntLessOrEqualIntless() {
     assertSingleBool(compile("2 <= 3"), true);
   }
 
   @Test
-  public void testIntLessOrEqualInt_greater() {
+  public void testIntLessOrEqualIntgreater() {
     assertSingleBool(compile("4 <= 3"), false);
   }
 
@@ -266,12 +265,12 @@ public class ComparisonTypeMatrixTest extends DummyTestSpecification {
   // ==================== >= ====================
 
   @Test
-  public void testIntGreaterOrEqualInt_equal() {
+  public void testIntGreaterOrEqualIntequal() {
     assertSingleBool(compile("3 >= 3"), true);
   }
 
   @Test
-  public void testIntGreaterOrEqualInt_greater() {
+  public void testIntGreaterOrEqualIntgreater() {
     assertSingleBool(compile("4 >= 3"), true);
   }
 

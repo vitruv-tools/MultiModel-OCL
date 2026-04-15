@@ -1,15 +1,14 @@
-/*******************************************************************************
+/*******************************************************************************.
  * Copyright (c) 2026 Max Oesterle
- *
  * This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License 2.0 which is available at
  * https://www.eclipse.org/legal/epl-2.0/
- *
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
+
 package tools.vitruv.multimodelocl;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -22,9 +21,12 @@ import tools.vitruv.multimodelocl.evaluator.Value;
  *
  * <pre>
  * Receiver × Operation:
- *   Set{T}      → size, isEmpty, notEmpty, includes, excluding, including, union, sum*, max*, min*, avg*, flatten
- *   Sequence{T} → size, isEmpty, notEmpty, includes, excluding, including, first, last, reverse, sum*, max*, min*, avg*, flatten
- *   Bag{T}      → size, isEmpty, notEmpty, includes, excluding, including, sum*, max*, min*, avg*, flatten
+ *   Set{T}      → size, isEmpty, notEmpty, includes, excluding,
+ *                    including, union, sum*, max*, min*, avg*, flatten
+ *   Sequence{T} → size, isEmpty, notEmpty, includes, excluding,
+ *                 including, first, last, reverse, sum*, max*, min*, avg*, flatten
+ *   Bag{T}      → size, isEmpty, notEmpty, includes,
+ *                    excluding, including, sum*, max*, min*, avg*, flatten
  *   Integer     → abs, floor, ceil, round (scalar numeric ops in collectionOpCS)
  *   Float       → abs, floor, ceil, round
  *   Double      → abs, floor, ceil, round
@@ -223,6 +225,7 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
   public void testSequenceFirstSingleton() {
     assertSingleInt(compile("Sequence{42}.first()"), 42);
   }
+
   // ==================== sum (numeric collections only) ====================
 
   @Test
@@ -246,12 +249,12 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
   }
 
   @Test
-  public void testSetStringSum_Fails() {
+  public void testSetStringSumFails() {
     assertTypeError("Set{\"a\",\"b\"}.sum()");
   }
 
   @Test
-  public void testSetBoolSum_Fails() {
+  public void testSetBoolSumFails() {
     assertTypeError("Set{true,false}.sum()");
   }
 
@@ -291,15 +294,12 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
 
   @Test
   public void testSetIntAvg() {
-    // Set{2,4,6}.avg() = 4.0
-    Value result = compile("Set{2,4,6}.avg()");
-    assertSingleDouble(result, 4.0);
+    assertSingleDouble(compile("Set{2,4,6}.avg()"), 4.0);
   }
 
   @Test
   public void testSequenceIntAvg() {
-    Value result = compile("Sequence{1,2,3,4}.avg()");
-    assertSingleDouble(result, 2.5);
+    assertSingleDouble(compile("Sequence{1,2,3,4}.avg()"), 2.5);
   }
 
   @Test
@@ -313,7 +313,6 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
 
   @Test
   public void testSetFlattenOnNestedFails() {
-    // flatten() on a flat Set{Integer} → TypeChecker rejects it
     assertTypeError("Set{1,2,3}.flatten()");
   }
 
@@ -330,12 +329,12 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
   // ==================== abs / floor / ceil / round (scalar numeric) ====================
 
   @Test
-  public void testIntAbs_positive() {
+  public void testIntAbsPositive() {
     assertSingleInt(compile("5.abs()"), 5);
   }
 
   @Test
-  public void testIntAbs_negative() {
+  public void testIntAbsNegative() {
     assertSingleInt(compile("(-5).abs()"), 5);
   }
 
@@ -355,54 +354,27 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
   }
 
   @Test
-  public void testDoubleFloor_knownBug() {
+  public void testDoubleFloor() {
     assertSingleDouble(compile("2.7.floor()"), 2.0);
   }
 
   @Test
-  public void testDoubleCeil_knownBug() {
+  public void testDoubleCeil() {
     assertSingleDouble(compile("2.3.ceil()"), 3.0);
   }
 
   @Test
-  public void testDoubleRound_up_knownBug() {
+  public void testDoubleRoundUp() {
     assertSingleDouble(compile("2.5.round()"), 3.0);
   }
 
   @Test
-  public void testDoubleRound_down_knownBug() {
+  public void testDoubleRoundDown() {
     assertSingleDouble(compile("2.4.round()"), 2.0);
   }
 
   @Test
-  public void testDoubleAbs_knownBug() {
-    assertSingleDouble(compile("2.5.abs()"), 2.5);
-  }
-
-  // ==================== Float floor/ceil/round (fixed) ====================
-
-  @Test
-  public void testFloatFloor() {
-    assertSingleDouble(compile("2.7.floor()"), 2.0);
-  }
-
-  @Test
-  public void testFloatCeil() {
-    assertSingleDouble(compile("2.3.ceil()"), 3.0);
-  }
-
-  @Test
-  public void testFloatRound_up() {
-    assertSingleDouble(compile("2.5.round()"), 3.0);
-  }
-
-  @Test
-  public void testFloatRound_down() {
-    assertSingleDouble(compile("2.4.round()"), 2.0);
-  }
-
-  @Test
-  public void testFloatAbs() {
+  public void testDoubleAbs() {
     assertSingleDouble(compile("2.5.abs()"), 2.5);
   }
 
@@ -421,20 +393,7 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
     assertTypeError("Set{1,2}.abs()");
   }
 
-  // ==================== avg integer division bug ====================
-
-  @Test
-  public void testSetIntAvg_knownBug() {
-    assertSingleDouble(compile("Set{2,4,6}.avg()"), 4.0);
-  }
-
-  @Test
-  public void testSequenceIntAvg_knownBug() {
-    // avg() now uses double division — fixed
-    assertSingleDouble(compile("Sequence{1,2,3,4}.avg()"), 2.5);
-  }
-
-  // ==================== Missing: sum/max/min on Float/Double collections ====================
+  // ==================== sum/max/min on Float/Double collections ====================
 
   @Test
   public void testSetDoubleSum() {
@@ -456,8 +415,7 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
     assertSingleDouble(compile("Set{1.5,3.5,2.0}.min()"), 1.5);
   }
 
-  // ==================== Missing: including/excluding with wrong arg type → ERROR
-  // ====================
+  // ==================== including/excluding with wrong arg type → ERROR ====================
 
   @Test
   public void testSetIntIncludingStringFails() {
@@ -474,7 +432,7 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
     assertTypeError("Set{\"a\",\"b\"}.including(3)");
   }
 
-  // ==================== Missing: size() on Float/Double receiver → ERROR ====================
+  // ==================== size() on Float/Double receiver → ERROR ====================
 
   @Test
   public void testFloatSizeOnScalarFails() {
@@ -486,7 +444,7 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
     assertTypeError("2.5.size()");
   }
 
-  // ==================== Missing: Bag max/min/avg ====================
+  // ==================== Bag max/min/avg ====================
 
   @Test
   public void testBagIntMax() {
@@ -503,7 +461,7 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
     assertSingleDouble(compile("Bag{2,4,6}.avg()"), 4.0);
   }
 
-  // ==================== Missing: first/last on Set/Bag → ERROR ====================
+  // ==================== first/last on Set/Bag → ERROR ====================
 
   @Test
   public void testSetFirstFails() {
@@ -525,7 +483,7 @@ public class CollectionOpTypeMatrixTest extends DummyTestSpecification {
     assertTypeError("Bag{1,2,3}.last()");
   }
 
-  // ==================== Missing: abs/floor/ceil/round on Collection → ERROR ====================
+  // ==================== abs/floor/ceil/round on Collection → ERROR ====================
 
   @Test
   public void testSequenceAbsFails() {
