@@ -39,30 +39,21 @@ import tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor;
 /**
  * Phase 3 visitor that evaluates OCL expressions and produces runtime values.
  *
- * <p>
- * This visitor implements the <b>evaluation phase</b> of the VitruvOCL compiler
- * pipeline,
- * operating after symbol table construction (Phase 1) and type checking (Phase
- * 2). It traverses the
- * parse tree and computes concrete runtime values ({@link Value} objects) for
- * OCL expressions.
+ * <p>This visitor implements the <b>evaluation phase</b> of the VitruvOCL compiler pipeline,
+ * operating after symbol table construction (Phase 1) and type checking (Phase 2). It traverses the
+ * parse tree and computes concrete runtime values ({@link Value} objects) for OCL expressions.
  *
  * <h2>Architecture</h2>
  *
- * The evaluator uses pre-computed type information from
- * {@link TypeCheckVisitor} stored in {@code
- * nodeTypes} to perform type-dependent operations correctly. It maintains a
- * {@code receiverStack}
- * to handle method chaining (e.g., {@code collection.select(...).size()}) and
- * uses the symbol table
+ * The evaluator uses pre-computed type information from {@link TypeCheckVisitor} stored in {@code
+ * nodeTypes} to perform type-dependent operations correctly. It maintains a {@code receiverStack}
+ * to handle method chaining (e.g., {@code collection.select(...).size()}) and uses the symbol table
  * for variable resolution.
  *
  * <h2>Error Handling</h2>
  *
- * Runtime errors (e.g., division by zero, type mismatches) are reported through
- * the {@link
- * ErrorCollector} with source location information. The evaluator returns
- * {@code
+ * Runtime errors (e.g., division by zero, type mismatches) are reported through the {@link
+ * ErrorCollector} with source location information. The evaluator returns {@code
  * Value.empty(Type.ERROR)} for failed operations.
  *
  * @see Value The runtime value type representing OCL collections
@@ -76,9 +67,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Pre-computed type information from Phase 2 (type checking).
    *
-   * <p>
-   * Maps parse tree nodes to their statically determined types. Used for
-   * type-dependent
+   * <p>Maps parse tree nodes to their statically determined types. Used for type-dependent
    * operations like determining collection element types for iterators.
    */
   private final ParseTreeProperty<Type> nodeTypes;
@@ -86,37 +75,26 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * EObject instances that violated a constraint, in evaluation order.
    *
-   * <p>
-   * Populated during {@link #visitClassifierContextCS}: one entry per instance
-   * where the
-   * invariant evaluated to false. Used by callers to produce precise violation
-   * messages.
+   * <p>Populated during {@link #visitClassifierContextCS}: one entry per instance where the
+   * invariant evaluated to false. Used by callers to produce precise violation messages.
    */
   private final List<EObject> violatingInstances = new ArrayList<>();
 
-  /**
-   * Token stream for potential future use (e.g., accessing comments or
-   * whitespace).
-   */
+  /** Token stream for potential future use (e.g., accessing comments or whitespace). */
   private org.antlr.v4.runtime.TokenStream tokens;
 
   /**
    * Stack of receiver values for navigation chains.
    *
-   * <p>
-   * When evaluating {@code receiver.operation()}, the receiver value is pushed
-   * onto this stack
-   * before visiting the operation node. This allows operation implementations to
-   * access their
+   * <p>When evaluating {@code receiver.operation()}, the receiver value is pushed onto this stack
+   * before visiting the operation node. This allows operation implementations to access their
    * receiver via {@code receiverStack.peek()}.
    *
-   * <p>
-   * <b>Example:</b> For {@code [1,2,3].select(x | x > 1).size()}, the stack
-   * evolves as:
+   * <p><b>Example:</b> For {@code [1,2,3].select(x | x > 1).size()}, the stack evolves as:
    *
    * <ol>
-   * <li>Push [1,2,3] → visit select → pop → result [2,3]
-   * <li>Push [2,3] → visit size → pop → result 2
+   *   <li>Push [1,2,3] → visit select → pop → result [2,3]
+   *   <li>Push [2,3] → visit size → pop → result 2
    * </ol>
    */
   private Deque<Value> receiverStack = new ArrayDeque<>();
@@ -126,13 +104,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Constructs an EvaluationVisitor for Phase 3 of the compilation pipeline.
    *
-   * @param symbolTable   The symbol table containing variable and type
-   *                      definitions
-   * @param specification The metamodel wrapper providing access to model
-   *                      instances
-   * @param errors        The error collector for reporting runtime errors
-   * @param nodeTypes     Pre-computed type information from the type checking
-   *                      phase
+   * @param symbolTable The symbol table containing variable and type definitions
+   * @param specification The metamodel wrapper providing access to model instances
+   * @param errors The error collector for reporting runtime errors
+   * @param nodeTypes Pre-computed type information from the type checking phase
    */
   public EvaluationVisitor(
       SymbolTable symbolTable,
@@ -148,12 +123,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Reports an undefined variable error.
    *
-   * <p>
-   * Called when attempting to resolve a variable that doesn't exist in the
-   * current scope.
+   * <p>Called when attempting to resolve a variable that doesn't exist in the current scope.
    *
    * @param name The undefined variable name
-   * @param ctx  The parse tree context where the error occurred
+   * @param ctx The parse tree context where the error occurred
    */
   @Override
   protected void handleUndefinedSymbol(String name, org.antlr.v4.runtime.ParserRuleContext ctx) {
@@ -168,13 +141,11 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Reports a runtime error and returns an error value.
    *
-   * <p>
-   * Convenience method for reporting errors with source location and returning
-   * {@code
+   * <p>Convenience method for reporting errors with source location and returning {@code
    * Value.empty(Type.ERROR)}.
    *
    * @param message The error message
-   * @param ctx     The parse tree context where the error occurred
+   * @param ctx The parse tree context where the error occurred
    * @return An empty error value
    */
   private Value error(String message, org.antlr.v4.runtime.ParserRuleContext ctx) {
@@ -192,13 +163,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the top-level context declaration.
    *
-   * <p>
-   * Processes all classifier contexts in the OCL document and returns the result
-   * of the last
+   * <p>Processes all classifier contexts in the OCL document and returns the result of the last
    * evaluated constraint.
    *
-   * <p>
-   * <b>Example:</b>
+   * <p><b>Example:</b>
    *
    * <pre>{@code
    * context Person inv:
@@ -223,24 +191,19 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   // ====================
 
   /**
-   * Evaluates a classifier context by iterating over all instances of the context
-   * type.
+   * Evaluates a classifier context by iterating over all instances of the context type.
    *
-   * <p>
-   * For each instance of the metaclass specified in the context (e.g.,
-   * {@code context Person}),
+   * <p>For each instance of the metaclass specified in the context (e.g., {@code context Person}),
    * this method:
    *
    * <ol>
-   * <li>Creates a new local scope
-   * <li>Binds {@code self} to the current instance
-   * <li>Evaluates all invariants in that scope
-   * <li>Collects results into a bag of boolean values
+   *   <li>Creates a new local scope
+   *   <li>Binds {@code self} to the current instance
+   *   <li>Evaluates all invariants in that scope
+   *   <li>Collects results into a bag of boolean values
    * </ol>
    *
-   * <p>
-   * <b>Example:</b> If there are 3 Person instances and the constraint is
-   * {@code self.age >= 0},
+   * <p><b>Example:</b> If there are 3 Person instances and the constraint is {@code self.age >= 0},
    * this returns a bag of 3 boolean values, one for each instance.
    *
    * @param ctx The classifier context node
@@ -270,7 +233,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
       symbolTable.enterScope(instanceScope);
 
       // Bind 'self' to current instance
-      Value selfValue = Value.of(List.of(new OCLElement.MetaclassValue(instance)), Type.singleton(contextType));
+      Value selfValue =
+          Value.of(List.of(new OCLElement.MetaclassValue(instance)), Type.singleton(contextType));
 
       VariableSymbol selfSymbol = symbolTable.resolveVariable("self");
       if (selfSymbol != null) {
@@ -278,7 +242,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
         selfSymbol.setValue(selfValue);
       } else {
         // Create new 'self' binding
-        VariableSymbol newSelf = new VariableSymbol("self", contextType, symbolTable.getCurrentScope(), false);
+        VariableSymbol newSelf =
+            new VariableSymbol("self", contextType, symbolTable.getCurrentScope(), false);
         newSelf.setValue(selfValue);
         symbolTable.defineVariable(newSelf);
       }
@@ -306,9 +271,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Returns EObject instances that violated the constraint during evaluation.
    *
-   * <p>
-   * Each entry corresponds to one invariant evaluation that returned false. Call
-   * after visiting
+   * <p>Each entry corresponds to one invariant evaluation that returned false. Call after visiting
    * the parse tree to retrieve violation context for precise error reporting.
    *
    * @return Unmodifiable list of violating EObjects in evaluation order
@@ -322,17 +285,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates an if-then-else expression.
    *
-   * <p>
-   * Evaluates the condition and returns the then-branch if true, else-branch if
-   * false.
+   * <p>Evaluates the condition and returns the then-branch if true, else-branch if false.
    * Implements short-circuit evaluation (only one branch is evaluated).
    *
-   * <p>
-   * <b>Syntax:</b>
-   * {@code if <condition> then <thenBranch> else <elseBranch> endif}
+   * <p><b>Syntax:</b> {@code if <condition> then <thenBranch> else <elseBranch> endif}
    *
-   * <p>
-   * <b>Example:</b> {@code if age >= 18 then 'adult' else 'minor' endif}
+   * <p><b>Example:</b> {@code if age >= 18 then 'adult' else 'minor' endif}
    *
    * @param ctx The if-expression node
    * @return The value of the selected branch
@@ -359,9 +317,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates an invariant constraint.
    *
-   * <p>
-   * Processes all specification expressions in the invariant and returns the
-   * result of the last
+   * <p>Processes all specification expressions in the invariant and returns the result of the last
    * one.
    *
    * @param ctx The invariant node
@@ -384,11 +340,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code isEmpty()} operation.
    *
-   * <p>
-   * Returns true if the receiver collection contains zero elements.
+   * <p>Returns true if the receiver collection contains zero elements.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{}.isEmpty()} → {@code true}
+   * <p><b>Example:</b> {@code Bag{}.isEmpty()} → {@code true}
    *
    * @param ctx The isEmpty operation node
    * @return A singleton boolean value
@@ -403,11 +357,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code notEmpty()} operation.
    *
-   * <p>
-   * Returns true if the receiver collection contains at least one element.
+   * <p>Returns true if the receiver collection contains at least one element.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1}.notEmpty()} → {@code true}
+   * <p><b>Example:</b> {@code Bag{1}.notEmpty()} → {@code true}
    *
    * @param ctx The notEmpty operation node
    * @return A singleton boolean value
@@ -421,12 +373,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code first()} operation.
    *
-   * <p>
-   * Returns the first element of an ordered collection, or empty if the
-   * collection is empty.
+   * <p>Returns the first element of an ordered collection, or empty if the collection is empty.
    *
-   * <p>
-   * <b>Example:</b> {@code Sequence{1,2,3}.first()} → {@code 1}
+   * <p><b>Example:</b> {@code Sequence{1,2,3}.first()} → {@code 1}
    *
    * @param ctx The first operation node
    * @return A singleton containing the first element, or empty
@@ -443,12 +392,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code last()} operation.
    *
-   * <p>
-   * Returns the last element of an ordered collection, or empty if the collection
-   * is empty.
+   * <p>Returns the last element of an ordered collection, or empty if the collection is empty.
    *
-   * <p>
-   * <b>Example:</b> {@code Sequence{1,2,3}.last()} → {@code 3}
+   * <p><b>Example:</b> {@code Sequence{1,2,3}.last()} → {@code 3}
    *
    * @param ctx The last operation node
    * @return A singleton containing the last element, or empty
@@ -466,11 +412,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code reverse()} operation.
    *
-   * <p>
-   * Returns a new collection with elements in reverse order.
+   * <p>Returns a new collection with elements in reverse order.
    *
-   * <p>
-   * <b>Example:</b> {@code Sequence{1,2,3}.reverse()} → {@code Sequence{3,2,1}}
+   * <p><b>Example:</b> {@code Sequence{1,2,3}.reverse()} → {@code Sequence{3,2,1}}
    *
    * @param ctx The reverse operation node
    * @return A new collection with reversed element order
@@ -486,11 +430,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code size()} operation.
    *
-   * <p>
-   * Returns the number of elements in the receiver collection.
+   * <p>Returns the number of elements in the receiver collection.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3}.size()} → {@code 3}
+   * <p><b>Example:</b> {@code Bag{1,2,3}.size()} → {@code 3}
    *
    * @param ctx The size operation node
    * @return A singleton integer value
@@ -506,13 +448,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code includes()} operation.
    *
-   * <p>
-   * Returns true if the receiver collection contains an element semantically
-   * equal to the
+   * <p>Returns true if the receiver collection contains an element semantically equal to the
    * argument.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3}.includes(2)} → {@code true}
+   * <p><b>Example:</b> {@code Bag{1,2,3}.includes(2)} → {@code true}
    *
    * @param ctx The includes operation node
    * @return A singleton boolean value
@@ -534,11 +473,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code including()} operation.
    *
-   * <p>
-   * Returns a new collection with the argument element added.
+   * <p>Returns a new collection with the argument element added.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2}.including(3)} → {@code Bag{1,2,3}}
+   * <p><b>Example:</b> {@code Bag{1,2}.including(3)} → {@code Bag{1,2,3}}
    *
    * @param ctx The including operation node
    * @return A new collection with the element added
@@ -556,12 +493,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code excluding()} operation.
    *
-   * <p>
-   * Returns a new collection with all occurrences of the argument element
-   * removed.
+   * <p>Returns a new collection with all occurrences of the argument element removed.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,2,3}.excluding(2)} → {@code Bag{1,3}}
+   * <p><b>Example:</b> {@code Bag{1,2,2,3}.excluding(2)} → {@code Bag{1,3}}
    *
    * @param ctx The excluding operation node
    * @return A new collection with the element removed
@@ -579,12 +513,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code excludes()} operation.
    *
-   * <p>
-   * Returns true if the receiver collection does NOT contain the argument
-   * element.
+   * <p>Returns true if the receiver collection does NOT contain the argument element.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3}.excludes(4)} → {@code true}
+   * <p><b>Example:</b> {@code Bag{1,2,3}.excludes(4)} → {@code true}
    *
    * @param ctx The excludes operation node
    * @return A singleton boolean value
@@ -602,13 +533,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code union()} operation.
    *
-   * <p>
-   * Returns a new collection containing all elements from both the receiver and
-   * argument
+   * <p>Returns a new collection containing all elements from both the receiver and argument
    * collections.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2}.union(Bag{2,3})} → {@code Bag{1,2,2,3}}
+   * <p><b>Example:</b> {@code Bag{1,2}.union(Bag{2,3})} → {@code Bag{1,2,2,3}}
    *
    * @param ctx The union operation node
    * @return A new collection with combined elements
@@ -623,12 +551,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code append()} operation.
    *
-   * <p>
-   * Appends an element to the end of an ordered collection. Currently implemented
-   * as union.
+   * <p>Appends an element to the end of an ordered collection. Currently implemented as union.
    *
-   * <p>
-   * <b>Example:</b> {@code Sequence{1,2}.append(3)} → {@code Sequence{1,2,3}}
+   * <p><b>Example:</b> {@code Sequence{1,2}.append(3)} → {@code Sequence{1,2,3}}
    *
    * @param ctx The append operation node
    * @return A new collection with the element appended
@@ -643,11 +568,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code flatten()} operation.
    *
-   * <p>
-   * Flattens nested collections into a single-level collection.
+   * <p>Flattens nested collections into a single-level collection.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{Bag{1,2}, Bag{3}}.flatten()} → {@code Bag{1,2,3}}
+   * <p><b>Example:</b> {@code Bag{Bag{1,2}, Bag{3}}.flatten()} → {@code Bag{1,2,3}}
    *
    * @param ctx The flatten operation node
    * @return A flattened collection
@@ -663,38 +586,44 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code sum()} operation.
    *
-   * <p>
-   * Returns the sum of all integer elements in the collection.
+   * <p>Returns the sum of all numeric elements. If all elements are integers, returns an Integer;
+   * if any element is Float or Double, returns a Double.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3}.sum()} → {@code 6}
+   * <p><b>Example:</b> {@code Bag{1,2,3}.sum()} → {@code 6}, {@code Set{1.5,2.5}.sum()} → {@code
+   * 4.0}
    *
    * @param ctx The sum operation node
-   * @return A singleton integer value
+   * @return A singleton integer or double value
    */
   @Override
   public Value visitSumOp(OCLParser.SumOpContext ctx) {
     Value receiver = receiverStack.peek();
-    int sum = 0;
-    for (OCLElement elem : receiver.getElements()) {
-      Integer value = elem.tryGetInt();
-      if (value == null) {
-        return error("sum() requires integers", ctx);
-      }
-      sum += value;
+    if (receiver.isEmpty()) {
+      return Value.intValue(0);
     }
-    return Value.intValue(sum);
+    boolean hasFloating = false;
+    double sum = 0.0;
+    for (OCLElement elem : receiver.getElements()) {
+      if (!OCLElement.isNumeric(elem)) {
+        return error("sum() requires numeric elements", ctx);
+      }
+      if (elem.tryGetFloat() != null || elem.tryGetDouble() != null) {
+        hasFloating = true;
+      }
+      sum += elem.toDoubleValue();
+    }
+    if (hasFloating) {
+      return Value.doubleValue(sum);
+    }
+    return Value.intValue((int) sum);
   }
 
   /**
    * Evaluates the {@code max()} operation.
    *
-   * <p>
-   * Returns the maximum integer value in the collection, or empty if the
-   * collection is empty.
+   * <p>Returns the maximum integer value in the collection, or empty if the collection is empty.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,5,3}.max()} → {@code 5}
+   * <p><b>Example:</b> {@code Bag{1,5,3}.max()} → {@code 5}
    *
    * @param ctx The max operation node
    * @return A singleton integer value, or empty
@@ -713,8 +642,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
         if (val == null) {
           return error("max() requires numeric elements", ctx);
         }
-        if (val > max)
-          max = val;
+        if (val > max) max = val;
       }
       return Value.doubleValue(max);
     }
@@ -724,8 +652,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
       if (val == null) {
         return error("max() requires numeric elements", ctx);
       }
-      if (val > max)
-        max = val;
+      if (val > max) max = val;
     }
     return Value.intValue(max);
   }
@@ -733,12 +660,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code min()} operation.
    *
-   * <p>
-   * Returns the minimum integer value in the collection, or empty if the
-   * collection is empty.
+   * <p>Returns the minimum integer value in the collection, or empty if the collection is empty.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,5,3}.min()} → {@code 1}
+   * <p><b>Example:</b> {@code Bag{1,5,3}.min()} → {@code 1}
    *
    * @param ctx The min operation node
    * @return A singleton integer value, or empty
@@ -757,8 +681,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
         if (val == null) {
           return error("min() requires numeric elements", ctx);
         }
-        if (val < min)
+        if (val < min) {
           min = val;
+        }
       }
       return Value.doubleValue(min);
     }
@@ -768,8 +693,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
       if (val == null) {
         return error("min() requires numeric elements", ctx);
       }
-      if (val < min)
+      if (val < min) {
         min = val;
+      }
     }
     return Value.intValue(min);
   }
@@ -777,40 +703,36 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code avg()} operation.
    *
-   * <p>
-   * Returns the average (integer division) of all elements in the collection.
+   * <p>Returns the arithmetic mean of all elements as a Double. Supports Integer, Float, and Double
+   * element types. Uses double arithmetic to avoid integer division truncation.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3}.avg()} → {@code 2}
+   * <p><b>Example:</b> {@code Sequence{1,2,3,4}.avg()} → {@code 2.5}
    *
    * @param ctx The avg operation node
-   * @return A singleton integer value, or empty if collection is empty
+   * @return A singleton Double value, or empty if the collection is empty
    */
   @Override
   public Value visitAvgOp(OCLParser.AvgOpContext ctx) {
     Value receiver = receiverStack.peek();
     if (receiver.isEmpty()) {
-      return Value.empty(Type.INTEGER);
+      return Value.empty(Type.DOUBLE);
     }
-    int sum = 0;
+    double sum = 0.0;
     for (OCLElement elem : receiver.getElements()) {
-      Integer value = elem.tryGetInt();
-      if (value == null) {
-        return error("avg() requires integers", ctx);
+      if (!OCLElement.isNumeric(elem)) {
+        return error("avg() requires numeric elements", ctx);
       }
-      sum += value;
+      sum += elem.toDoubleValue();
     }
-    return Value.intValue(sum / receiver.size());
+    return Value.doubleValue(sum / receiver.size());
   }
 
   /**
    * Evaluates the {@code abs()} operation.
    *
-   * <p>
-   * Returns a collection with absolute values of all elements.
+   * <p>Returns the absolute value of each element. Supports Integer, Float, and Double receivers.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{-1, 2, -3}.abs()} → {@code Bag{1, 2, 3}}
+   * <p><b>Example:</b> {@code (-3).abs()} → {@code 3}, {@code (-2.5).abs()} → {@code 2.5}
    *
    * @param ctx The abs operation node
    * @return A collection with absolute values
@@ -820,11 +742,15 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     Value receiver = receiverStack.peek();
     List<OCLElement> results = new ArrayList<>();
     for (OCLElement elem : receiver.getElements()) {
-      Integer val = elem.tryGetInt();
-      if (val == null) {
-        return error("abs() requires integers", ctx);
+      if (elem.tryGetInt() != null) {
+        results.add(new OCLElement.IntValue(Math.abs(elem.tryGetInt())));
+      } else if (elem.tryGetFloat() != null) {
+        results.add(new OCLElement.FloatValue(Math.abs(elem.tryGetFloat())));
+      } else if (elem.tryGetDouble() != null) {
+        results.add(new OCLElement.DoubleValue(Math.abs(elem.tryGetDouble())));
+      } else {
+        return error("abs() requires a numeric value", ctx);
       }
-      results.add(new OCLElement.IntValue(Math.abs(val)));
     }
     return Value.of(results, receiver.getRuntimeType());
   }
@@ -832,43 +758,86 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code floor()} operation.
    *
-   * <p>
-   * For integer collections, this is a no-op (returns the receiver unchanged).
+   * <p>For integers, this is a no-op. For Float and Double, applies {@link Math#floor}.
+   *
+   * <p><b>Example:</b> {@code 2.7.floor()} → {@code 2.0}, {@code 5.floor()} → {@code 5}
    *
    * @param ctx The floor operation node
-   * @return The unchanged receiver
+   * @return A collection with floored values
    */
   @Override
   public Value visitFloorOp(OCLParser.FloorOpContext ctx) {
-    return receiverStack.peek(); // No-op for integers
+    Value receiver = receiverStack.peek();
+    List<OCLElement> results = new ArrayList<>();
+    for (OCLElement elem : receiver.getElements()) {
+      if (elem.tryGetInt() != null) {
+        results.add(elem); // no-op for integers
+      } else if (elem.tryGetFloat() != null) {
+        results.add(new OCLElement.DoubleValue(Math.floor(elem.tryGetFloat())));
+      } else if (elem.tryGetDouble() != null) {
+        results.add(new OCLElement.DoubleValue(Math.floor(elem.tryGetDouble())));
+      } else {
+        return error("floor() requires a numeric value", ctx);
+      }
+    }
+    return Value.of(results, receiver.getRuntimeType());
   }
 
   /**
    * Evaluates the {@code ceil()} operation.
    *
-   * <p>
-   * For integer collections, this is a no-op (returns the receiver unchanged).
+   * <p>For integers, this is a no-op. For Float and Double, applies {@link Math#ceil}.
+   *
+   * <p><b>Example:</b> {@code 2.3.ceil()} → {@code 3.0}, {@code 5.ceil()} → {@code 5}
    *
    * @param ctx The ceil operation node
-   * @return The unchanged receiver
+   * @return A collection with ceiled values
    */
   @Override
   public Value visitCeilOp(OCLParser.CeilOpContext ctx) {
-    return receiverStack.peek();
+    Value receiver = receiverStack.peek();
+    List<OCLElement> results = new ArrayList<>();
+    for (OCLElement elem : receiver.getElements()) {
+      if (elem.tryGetInt() != null) {
+        results.add(elem); // no-op for integers
+      } else if (elem.tryGetFloat() != null) {
+        results.add(new OCLElement.DoubleValue(Math.ceil(elem.tryGetFloat())));
+      } else if (elem.tryGetDouble() != null) {
+        results.add(new OCLElement.DoubleValue(Math.ceil(elem.tryGetDouble())));
+      } else {
+        return error("ceil() requires a numeric value", ctx);
+      }
+    }
+    return Value.of(results, receiver.getRuntimeType());
   }
 
   /**
    * Evaluates the {@code round()} operation.
    *
-   * <p>
-   * For integer collections, this is a no-op (returns the receiver unchanged).
+   * <p>For integers, this is a no-op. For Float and Double, rounds to the nearest integer using
+   * "round half up" semantics ({@link Math#round}).
+   *
+   * <p><b>Example:</b> {@code 2.5.round()} → {@code 3.0}, {@code 2.4.round()} → {@code 2.0}
    *
    * @param ctx The round operation node
-   * @return The unchanged receiver
+   * @return A collection with rounded values
    */
   @Override
   public Value visitRoundOp(OCLParser.RoundOpContext ctx) {
-    return receiverStack.peek();
+    Value receiver = receiverStack.peek();
+    List<OCLElement> results = new ArrayList<>();
+    for (OCLElement elem : receiver.getElements()) {
+      if (elem.tryGetInt() != null) {
+        results.add(elem); // no-op for integers
+      } else if (elem.tryGetFloat() != null) {
+        results.add(new OCLElement.DoubleValue((double) Math.round(elem.tryGetFloat())));
+      } else if (elem.tryGetDouble() != null) {
+        results.add(new OCLElement.DoubleValue((double) Math.round(elem.tryGetDouble())));
+      } else {
+        return error("round() requires a numeric value", ctx);
+      }
+    }
+    return Value.of(results, receiver.getRuntimeType());
   }
 
   // ==================== String Operations ====================
@@ -876,11 +845,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code concat()} operation.
    *
-   * <p>
-   * Concatenates two strings together.
+   * <p>Concatenates two strings together.
    *
-   * <p>
-   * <b>Example:</b> {@code 'Hello'.concat(' World')} → {@code 'Hello World'}
+   * <p><b>Example:</b> {@code 'Hello'.concat(' World')} → {@code 'Hello World'}
    *
    * @param ctx The concat operation node
    * @return A singleton string value
@@ -913,21 +880,14 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the substring operation on string values.
    *
-   * <p>
-   * Extracts a substring from each string in the receiver collection using
-   * 1-based OCL indexing.
-   * The operation takes two integer arguments: start position (inclusive) and end
-   * position
+   * <p>Extracts a substring from each string in the receiver collection using 1-based OCL indexing.
+   * The operation takes two integer arguments: start position (inclusive) and end position
    * (exclusive in Java terms).
    *
-   * <p>
-   * Example: "Hello".substring(2, 4) returns "el" (positions 2-3 in OCL's 1-based
-   * indexing)
+   * <p>Example: "Hello".substring(2, 4) returns "el" (positions 2-3 in OCL's 1-based indexing)
    *
-   * @param ctx The substring operation context containing start and end
-   *            expressions
-   * @return A collection of substring values, empty if arguments are invalid or
-   *         out of bounds
+   * @param ctx The substring operation context containing start and end expressions
+   * @return A collection of substring values, empty if arguments are invalid or out of bounds
    */
   @Override
   public Value visitSubstringOp(OCLParser.SubstringOpContext ctx) {
@@ -963,11 +923,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code toUpper()} operation.
    *
-   * <p>
-   * Converts a string to uppercase.
+   * <p>Converts a string to uppercase.
    *
-   * <p>
-   * <b>Example:</b> {@code 'hello'.toUpper()} → {@code 'HELLO'}
+   * <p><b>Example:</b> {@code 'hello'.toUpper()} → {@code 'HELLO'}
    *
    * @param ctx The toUpper operation node
    * @return A singleton string value in uppercase
@@ -990,11 +948,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code toLower()} operation.
    *
-   * <p>
-   * Converts a string to lowercase.
+   * <p>Converts a string to lowercase.
    *
-   * <p>
-   * <b>Example:</b> {@code 'HELLO'.toLower()} → {@code 'hello'}
+   * <p><b>Example:</b> {@code 'HELLO'.toLower()} → {@code 'hello'}
    *
    * @param ctx The toLower operation node
    * @return A singleton string value in lowercase
@@ -1017,12 +973,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code indexOf()} operation.
    *
-   * <p>
-   * Returns the 1-based index of the first occurrence of a substring, or 0 if not
-   * found.
+   * <p>Returns the 1-based index of the first occurrence of a substring, or 0 if not found.
    *
-   * <p>
-   * <b>Example:</b> {@code 'hello'.indexOf('ll')} → {@code 3}
+   * <p><b>Example:</b> {@code 'hello'.indexOf('ll')} → {@code 3}
    *
    * @param ctx The indexOf operation node
    * @return A singleton integer value (1-based index, or 0 if not found)
@@ -1058,11 +1011,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code equalsIgnoreCase()} operation.
    *
-   * <p>
-   * Compares two strings ignoring case differences.
+   * <p>Compares two strings ignoring case differences.
    *
-   * <p>
-   * <b>Example:</b> {@code 'Hello'.equalsIgnoreCase('HELLO')} → {@code true}
+   * <p><b>Example:</b> {@code 'Hello'.equalsIgnoreCase('HELLO')} → {@code true}
    *
    * @param ctx The equalsIgnoreCase operation node
    * @return A singleton boolean value
@@ -1097,11 +1048,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code select()} iterator operation.
    *
-   * <p>
-   * Filters the collection, keeping only elements that satisfy the predicate.
+   * <p>Filters the collection, keeping only elements that satisfy the predicate.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3,4}.select(x | x > 2)} → {@code Bag{3,4}}
+   * <p><b>Example:</b> {@code Bag{1,2,3,4}.select(x | x > 2)} → {@code Bag{3,4}}
    *
    * @param ctx The select operation node
    * @return A filtered collection
@@ -1136,12 +1085,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code reject()} iterator operation.
    *
-   * <p>
-   * Filters the collection, keeping only elements that do NOT satisfy the
-   * predicate.
+   * <p>Filters the collection, keeping only elements that do NOT satisfy the predicate.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3,4}.reject(x | x > 2)} → {@code Bag{1,2}}
+   * <p><b>Example:</b> {@code Bag{1,2,3,4}.reject(x | x > 2)} → {@code Bag{1,2}}
    *
    * @param ctx The reject operation node
    * @return A filtered collection
@@ -1176,11 +1122,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code collect()} iterator operation.
    *
-   * <p>
-   * Transforms each element in the collection using the provided expression.
+   * <p>Transforms each element in the collection using the provided expression.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3}.collect(x | x * 2)} → {@code Bag{2,4,6}}
+   * <p><b>Example:</b> {@code Bag{1,2,3}.collect(x | x * 2)} → {@code Bag{2,4,6}}
    *
    * @param ctx The collect operation node
    * @return A new collection with transformed elements
@@ -1215,13 +1159,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code forAll()} iterator operation.
    *
-   * <p>
-   * Returns true if the predicate holds for ALL elements in the collection.
-   * Short-circuits on
+   * <p>Returns true if the predicate holds for ALL elements in the collection. Short-circuits on
    * first false.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{2,4,6}.forAll(x | x > 0)} → {@code true}
+   * <p><b>Example:</b> {@code Bag{2,4,6}.forAll(x | x > 0)} → {@code true}
    *
    * @param ctx The forAll operation node
    * @return A singleton boolean value
@@ -1256,13 +1197,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code exists()} iterator operation.
    *
-   * <p>
-   * Returns true if the predicate holds for AT LEAST ONE element in the
-   * collection.
+   * <p>Returns true if the predicate holds for AT LEAST ONE element in the collection.
    * Short-circuits on first true.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3}.exists(x | x > 2)} → {@code true}
+   * <p><b>Example:</b> {@code Bag{1,2,3}.exists(x | x > 2)} → {@code true}
    *
    * @param ctx The exists operation node
    * @return A singleton boolean value
@@ -1297,17 +1235,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code oclAsType()} operation.
    *
-   * <p>
-   * Type cast operation that preserves the multiplicity semantics. The nodeTypes
-   * entry for this
-   * node is now ¡targetType! (Singleton) after the TypeCheckVisitor fix — so we
-   * must unwrap through
+   * <p>Type cast operation that preserves the multiplicity semantics. The nodeTypes entry for this
+   * node is now ¡targetType! (Singleton) after the TypeCheckVisitor fix — so we must unwrap through
    * isSingleton() as well as isCollection() to reach the bare MetaclassType.
    *
-   * <p>
-   * Guard against infinite unwrapping: bare types return {@code this} from {@code
-   * getElementType()}, so we stop as soon as the element type is the same object
-   * as the current
+   * <p>Guard against infinite unwrapping: bare types return {@code this} from {@code
+   * getElementType()}, so we stop as soon as the element type is the same object as the current
    * type.
    *
    * @param ctx The oclAsType operation node
@@ -1383,11 +1316,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates variable references.
    *
-   * <p>
-   * Handles the special {@code null} keyword, which evaluates to an empty
-   * optional value {@code
-   * ?Any? = []} rather than looking up a variable. All other names are resolved
-   * from the symbol
+   * <p>Handles the special {@code null} keyword, which evaluates to an empty optional value {@code
+   * ?Any? = []} rather than looking up a variable. All other names are resolved from the symbol
    * table.
    *
    * @param ctx The variable expression node
@@ -1419,18 +1349,14 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates forAll operation with a single iterator variable.
    *
-   * <p>
-   * In each iterated element is a singleton ¡T!, so the iterator variable is
-   * bound with Value
-   * type singleton(elemType) to match the TypeCheckVisitor's
-   * normalizeToSingleton() treatment of
+   * <p>In each iterated element is a singleton ¡T!, so the iterator variable is bound with Value
+   * type singleton(elemType) to match the TypeCheckVisitor's normalizeToSingleton() treatment of
    * iterator variables.
    *
-   * @param ctx      Parser context for forAll operation
+   * @param ctx Parser context for forAll operation
    * @param receiver Collection to check
-   * @param iterVar  Name of iterator variable to bind
-   * @return Singleton Boolean: true if all elements satisfy predicate, false if
-   *         any fails
+   * @param iterVar Name of iterator variable to bind
+   * @return Singleton Boolean: true if all elements satisfy predicate, false if any fails
    */
   private Value evaluateForAllSingleVar(
       OCLParser.ForAllOpContext ctx, Value receiver, String iterVar) {
@@ -1472,15 +1398,13 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates forAll operation with two iterator variables (Cartesian product).
    *
-   * <p>
-   * Iterator variables are bound as singleton ¡T! per semantics.
+   * <p>Iterator variables are bound as singleton ¡T! per semantics.
    *
-   * @param ctx      Parser context for forAll operation
+   * @param ctx Parser context for forAll operation
    * @param receiver Collection to iterate over
-   * @param var1     Name of first iterator variable
-   * @param var2     Name of second iterator variable
-   * @return Singleton Boolean: true if predicate holds for all pairs, false if
-   *         any pair fails
+   * @param var1 Name of first iterator variable
+   * @param var2 Name of second iterator variable
+   * @return Singleton Boolean: true if predicate holds for all pairs, false if any pair fails
    */
   private Value evaluateForAllTwoVars(
       OCLParser.ForAllOpContext ctx, Value receiver, String var1, String var2) {
@@ -1528,12 +1452,11 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates select operation with a single iterator variable.
    *
-   * <p>
-   * Iterator variable is bound as singleton ¡T! per semantics.
+   * <p>Iterator variable is bound as singleton ¡T! per semantics.
    *
-   * @param ctx      Parser context for select operation
+   * @param ctx Parser context for select operation
    * @param receiver Collection to filter
-   * @param iterVar  Name of iterator variable to bind
+   * @param iterVar Name of iterator variable to bind
    * @return Collection of elements satisfying the predicate
    */
   private Value evaluateSelectSingleVar(
@@ -1574,13 +1497,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates select operation with two iterator variables (Cartesian product).
    *
-   * <p>
-   * Iterator variables are bound as singleton ¡T! per semantics.
+   * <p>Iterator variables are bound as singleton ¡T! per semantics.
    *
-   * @param ctx      Parser context for select operation
+   * @param ctx Parser context for select operation
    * @param receiver Collection to iterate over
-   * @param var1     Name of first iterator variable
-   * @param var2     Name of second iterator variable
+   * @param var1 Name of first iterator variable
+   * @param var2 Name of second iterator variable
    * @return Collection containing both elements of each matching pair
    */
   private Value evaluateSelectTwoVars(
@@ -1630,12 +1552,11 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates reject operation with a single iterator variable.
    *
-   * <p>
-   * Iterator variable is bound as singleton ¡T! per semantics.
+   * <p>Iterator variable is bound as singleton ¡T! per semantics.
    *
-   * @param ctx      Parser context for reject operation
+   * @param ctx Parser context for reject operation
    * @param receiver Collection to filter
-   * @param iterVar  Name of iterator variable to bind
+   * @param iterVar Name of iterator variable to bind
    * @return Collection of elements NOT satisfying the predicate
    */
   private Value evaluateRejectSingleVar(
@@ -1677,13 +1598,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates reject operation with two iterator variables (Cartesian product).
    *
-   * <p>
-   * Iterator variables are bound as singleton ¡T! per semantics.
+   * <p>Iterator variables are bound as singleton ¡T! per semantics.
    *
-   * @param ctx      Parser context for reject operation
+   * @param ctx Parser context for reject operation
    * @param receiver Collection to iterate over
-   * @param var1     Name of first iterator variable
-   * @param var2     Name of second iterator variable
+   * @param var1 Name of first iterator variable
+   * @param var2 Name of second iterator variable
    * @return Collection containing both elements of each non-matching pair
    */
   private Value evaluateRejectTwoVars(
@@ -1734,12 +1654,11 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates collect operation with a single iterator variable.
    *
-   * <p>
-   * Iterator variable is bound as singleton ¡T! per semantics.
+   * <p>Iterator variable is bound as singleton ¡T! per semantics.
    *
-   * @param ctx      Parser context for collect operation
+   * @param ctx Parser context for collect operation
    * @param receiver Collection to transform
-   * @param iterVar  Name of iterator variable to bind
+   * @param iterVar Name of iterator variable to bind
    * @return Flattened collection of all transformation results
    */
   private Value evaluateCollectSingleVar(
@@ -1771,13 +1690,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates collect operation with two iterator variables (Cartesian product).
    *
-   * <p>
-   * Iterator variables are bound as singleton ¡T! per semantics.
+   * <p>Iterator variables are bound as singleton ¡T! per semantics.
    *
-   * @param ctx      Parser context for collect operation
+   * @param ctx Parser context for collect operation
    * @param receiver Collection to iterate over
-   * @param var1     Name of first iterator variable
-   * @param var2     Name of second iterator variable
+   * @param var1 Name of first iterator variable
+   * @param var2 Name of second iterator variable
    * @return Flattened collection of all transformation results from each pair
    */
   private Value evaluateCollectTwoVars(
@@ -1817,14 +1735,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates exists operation with a single iterator variable.
    *
-   * <p>
-   * Iterator variable is bound as singleton ¡T!.
+   * <p>Iterator variable is bound as singleton ¡T!.
    *
-   * @param ctx      Parser context for exists operation
+   * @param ctx Parser context for exists operation
    * @param receiver Collection to iterate over
-   * @param iterVar  Name of iterator variable to bind
-   * @return Singleton Boolean: true if any element satisfies predicate, false if
-   *         none do
+   * @param iterVar Name of iterator variable to bind
+   * @return Singleton Boolean: true if any element satisfies predicate, false if none do
    */
   private Value evaluateExistsSingleVar(
       OCLParser.ExistsOpContext ctx, Value receiver, String iterVar) {
@@ -1864,15 +1780,13 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates exists operation with two iterator variables (Cartesian product).
    *
-   * <p>
-   * Iterator variables are bound as singleton ¡T!.
+   * <p>Iterator variables are bound as singleton ¡T!.
    *
-   * @param ctx      Parser context for exists operation
+   * @param ctx Parser context for exists operation
    * @param receiver Collection to iterate over
-   * @param var1     Name of first iterator variable
-   * @param var2     Name of second iterator variable
-   * @return Singleton Boolean: true if any pair satisfies predicate, false if no
-   *         pairs do
+   * @param var1 Name of first iterator variable
+   * @param var2 Name of second iterator variable
+   * @return Singleton Boolean: true if any pair satisfies predicate, false if no pairs do
    */
   private Value evaluateExistsTwoVars(
       OCLParser.ExistsOpContext ctx, Value receiver, String var1, String var2) {
@@ -1922,19 +1836,16 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates multiplicative operations ({@code *} and {@code /}).
    *
-   * <p>
-   * Numeric promotion (INTEGER ⊂ FLOAT ⊂ DOUBLE):
+   * <p>Numeric promotion (INTEGER ⊂ FLOAT ⊂ DOUBLE):
    *
    * <ul>
-   * <li>Both operands INTEGER with {@code *} → integer arithmetic
-   * <li>Both operands INTEGER with {@code /} → real arithmetic (DOUBLE)
-   * <li>Either operand FLOAT (and neither DOUBLE) → float arithmetic
-   * <li>Either operand DOUBLE → double arithmetic
+   *   <li>Both operands INTEGER with {@code *} → integer arithmetic
+   *   <li>Both operands INTEGER with {@code /} → real arithmetic (DOUBLE)
+   *   <li>Either operand FLOAT (and neither DOUBLE) → float arithmetic
+   *   <li>Either operand DOUBLE → double arithmetic
    * </ul>
    *
-   * <p>
-   * Integer division by zero is an error; floating-point division by zero
-   * produces ±Infinity
+   * <p>Integer division by zero is an error; floating-point division by zero produces ±Infinity
    * following IEEE 754.
    *
    * @param ctx The multiplicative operation node
@@ -1993,13 +1904,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates additive operations ({@code +} and {@code -}).
    *
-   * <p>
-   * Numeric promotion (INTEGER ⊂ FLOAT ⊂ DOUBLE):
+   * <p>Numeric promotion (INTEGER ⊂ FLOAT ⊂ DOUBLE):
    *
    * <ul>
-   * <li>Both operands INTEGER → integer arithmetic
-   * <li>Either operand FLOAT (and neither DOUBLE) → float arithmetic
-   * <li>Either operand DOUBLE → double arithmetic
+   *   <li>Both operands INTEGER → integer arithmetic
+   *   <li>Either operand FLOAT (and neither DOUBLE) → float arithmetic
+   *   <li>Either operand DOUBLE → double arithmetic
    * </ul>
    *
    * @param ctx The additive operation node
@@ -2052,8 +1962,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   // ==================== Comparison Operations ====================
 
   /**
-   * Evaluates equality comparison (==). Both operands must be singletons for
-   * comparison.
+   * Evaluates equality comparison (==). Both operands must be singletons for comparison.
    *
    * @param ctx the equality comparison context
    * @return singleton boolean Value with comparison result
@@ -2065,8 +1974,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates inequality comparison (!=). Both operands must be singletons for
-   * comparison.
+   * Evaluates inequality comparison (!=). Both operands must be singletons for comparison.
    *
    * @param ctx the inequality comparison context
    * @return singleton boolean Value with comparison result
@@ -2078,8 +1986,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates less-than comparison. Both operands must be singletons for
-   * comparison.
+   * Evaluates less-than comparison. Both operands must be singletons for comparison.
    *
    * @param ctx the less-than comparison context
    * @return singleton boolean Value with comparison result
@@ -2091,8 +1998,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates less-than-or-equal comparison. Both operands must be singletons for
-   * comparison.
+   * Evaluates less-than-or-equal comparison. Both operands must be singletons for comparison.
    *
    * @param ctx the less-than-or-equal comparison context
    * @return singleton boolean Value with comparison result
@@ -2104,8 +2010,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates greater-than comparison. Both operands must be singletons for
-   * comparison.
+   * Evaluates greater-than comparison. Both operands must be singletons for comparison.
    *
    * @param ctx the greater-than comparison context
    * @return singleton boolean Value with comparison result
@@ -2117,8 +2022,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Evaluates greater-than-or-equal comparison (>=). Both operands must be
-   * singletons for
+   * Evaluates greater-than-or-equal comparison (>=). Both operands must be singletons for
    * comparison.
    *
    * @param ctx the greater-than-or-equal comparison context
@@ -2132,13 +2036,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Helper method for evaluating binary comparisons. Extracts singleton operands
-   * and applies the
+   * Helper method for evaluating binary comparisons. Extracts singleton operands and applies the
    * comparison function.
    *
-   * @param leftCtx      the left operand context
-   * @param rightCtx     the right operand context
-   * @param errorCtx     context for error reporting
+   * @param leftCtx the left operand context
+   * @param rightCtx the right operand context
+   * @param errorCtx context for error reporting
    * @param comparisonFn the comparison function to apply
    * @return singleton boolean Value with comparison result
    */
@@ -2171,8 +2074,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates logical AND operation. Both operands must be singleton booleans.
    *
-   * <p>
-   * <b>Example:</b> {@code true and false} → {@code false}
+   * <p><b>Example:</b> {@code true and false} → {@code false}
    *
    * @param ctx the logical AND context
    * @return singleton boolean Value with AND result
@@ -2185,8 +2087,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates logical OR operation. Both operands must be singleton booleans.
    *
-   * <p>
-   * <b>Example:</b> {@code true or false} → {@code true}
+   * <p><b>Example:</b> {@code true or false} → {@code true}
    *
    * @param ctx the logical OR context
    * @return singleton boolean Value with OR result
@@ -2199,8 +2100,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates logical XOR operation. Both operands must be singleton booleans.
    *
-   * <p>
-   * <b>Example:</b> {@code true xor true} → {@code false}
+   * <p><b>Example:</b> {@code true xor true} → {@code false}
    *
    * @param ctx the logical XOR context
    * @return singleton boolean Value with XOR result
@@ -2211,13 +2111,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   }
 
   /**
-   * Helper method for evaluating binary logical operations. Extracts singleton
-   * boolean operands and
+   * Helper method for evaluating binary logical operations. Extracts singleton boolean operands and
    * applies the logical function.
    *
-   * @param leftCtx   the left operand context
-   * @param rightCtx  the right operand context
-   * @param errorCtx  context for error reporting
+   * @param leftCtx the left operand context
+   * @param rightCtx the right operand context
+   * @param errorCtx context for error reporting
    * @param logicalFn the logical function to apply
    * @return singleton boolean Value with operation result
    */
@@ -2251,19 +2150,16 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the implication operation (implies).
    *
-   * <p>
-   * Implements logical implication: {@code A implies B} is equivalent to
-   * {@code (not A) or B}.
+   * <p>Implements logical implication: {@code A implies B} is equivalent to {@code (not A) or B}.
    * Both operands must be singleton booleans.
    *
-   * <p>
-   * <b>Examples:</b>
+   * <p><b>Examples:</b>
    *
    * <ul>
-   * <li>{@code true implies true} → {@code true}
-   * <li>{@code true implies false} → {@code false}
-   * <li>{@code false implies true} → {@code true}
-   * <li>{@code false implies false} → {@code true}
+   *   <li>{@code true implies true} → {@code true}
+   *   <li>{@code true implies false} → {@code false}
+   *   <li>{@code false implies true} → {@code true}
+   *   <li>{@code false implies false} → {@code true}
    * </ul>
    *
    * @param ctx The implication operation node
@@ -2298,16 +2194,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates primary expression with navigation chain.
    *
-   * <p>
-   * Processes base expression followed by zero or more navigation steps (property
-   * access, method
-   * calls, iterator operations). Each navigation step uses the previous result as
-   * its receiver,
+   * <p>Processes base expression followed by zero or more navigation steps (property access, method
+   * calls, iterator operations). Each navigation step uses the previous result as its receiver,
    * enabling method chaining like {@code spacecraft.payload.name}.
    *
    * @param ctx Parser context for primary expression with navigation
-   * @return Final value after applying all navigation steps, or error Value if
-   *         any step fails
+   * @return Final value after applying all navigation steps, or error Value if any step fails
    */
   @Override
   public Value visitPrimaryWithNav(OCLParser.PrimaryWithNavContext ctx) {
@@ -2330,15 +2222,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates unary minus operation.
    *
-   * <p>
-   * Implements OCL unary negation: requires singleton integer operand, returns
-   * negated value as
+   * <p>Implements OCL unary negation: requires singleton integer operand, returns negated value as
    * singleton collection following "everything is a collection" principle.
    *
    * @param ctx Parser context for unary minus expression
-   * @return Singleton collection containing negated integer, or error Value if
-   *         operand is
-   *         non-singleton or non-integer
+   * @return Singleton collection containing negated integer, or error Value if operand is
+   *     non-singleton or non-integer
    */
   @Override
   public Value visitUnaryMinus(OCLParser.UnaryMinusContext ctx) {
@@ -2372,16 +2261,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates logical not operation.
    *
-   * <p>
-   * Implements OCL boolean negation: negates all boolean elements in the operand
-   * collection.
-   * Supports both singleton and multi-element collections, returning a collection
-   * of the same size
+   * <p>Implements OCL boolean negation: negates all boolean elements in the operand collection.
+   * Supports both singleton and multi-element collections, returning a collection of the same size
    * with all values negated.
    *
    * @param ctx Parser context for logical not expression
-   * @return Collection of negated boolean values, or error Value if any element
-   *         is non-boolean
+   * @return Collection of negated boolean values, or error Value if any element is non-boolean
    */
   @Override
   public Value visitLogicalNot(OCLParser.LogicalNotContext ctx) {
@@ -2408,11 +2293,9 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Helper method to evaluate navigation with an explicit receiver value.
    *
-   * <p>
-   * Delegates to either property access or operation call based on the navigation
-   * target type.
+   * <p>Delegates to either property access or operation call based on the navigation target type.
    *
-   * @param ctx      The navigation chain node
+   * @param ctx The navigation chain node
    * @param receiver The receiver value for the navigation
    * @return The result of the navigation
    */
@@ -2444,14 +2327,11 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Helper method to evaluate operation calls with an explicit receiver.
    *
-   * <p>
-   * Pushes the receiver onto {@code receiverStack} before visiting the operation,
-   * then pops it
-   * after. This allows operation visitor methods to access their receiver via
-   * {@code
+   * <p>Pushes the receiver onto {@code receiverStack} before visiting the operation, then pops it
+   * after. This allows operation visitor methods to access their receiver via {@code
    * receiverStack.peek()}.
    *
-   * @param ctx      The operation call node
+   * @param ctx The operation call node
    * @param receiver The receiver value for the operation
    * @return The result of the operation
    */
@@ -2471,19 +2351,15 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code allInstances()} operation.
    *
-   * <p>
-   * Returns all instances of the receiver metaclass from the loaded models. This
-   * is the primary
+   * <p>Returns all instances of the receiver metaclass from the loaded models. This is the primary
    * operation for accessing model elements in constraints.
    *
-   * <p>
-   * <b>Examples:</b>
+   * <p><b>Examples:</b>
    *
    * <ul>
-   * <li>{@code Person.allInstances()} → all Person instances
-   * <li>{@code spaceMission::Spacecraft.allInstances()} → all Spacecraft
-   * instances (qualified
-   * name)
+   *   <li>{@code Person.allInstances()} → all Person instances
+   *   <li>{@code spaceMission::Spacecraft.allInstances()} → all Spacecraft instances (qualified
+   *       name)
    * </ul>
    *
    * @param ctx The allInstances operation node
@@ -2512,7 +2388,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     // Get all instances from metamodel
     EClass eClass = receiverType.getEClass();
     List<EObject> instances = specification.getAllInstances(eClass);
-    List<OCLElement> elements = instances.stream().map(obj -> (OCLElement) new OCLElement.MetaclassValue(obj)).toList();
+    List<OCLElement> elements =
+        instances.stream().map(obj -> (OCLElement) new OCLElement.MetaclassValue(obj)).toList();
 
     Type resultType = nodeTypes.get(ctx);
     return Value.of(elements, resultType != null ? resultType : Type.set(receiverType));
@@ -2521,20 +2398,17 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates property access on metaclass instances.
    *
-   * <p>
-   * Accesses EMF structural features (attributes and references) on model
-   * instances. For
+   * <p>Accesses EMF structural features (attributes and references) on model instances. For
    * multi-valued features, all values are flattened into the result collection.
    *
-   * <p>
-   * <b>Examples:</b>
+   * <p><b>Examples:</b>
    *
    * <ul>
-   * <li>{@code person.name} → singleton with person's name
-   * <li>{@code company.employees} → collection of all employees
+   *   <li>{@code person.name} → singleton with person's name
+   *   <li>{@code company.employees} → collection of all employees
    * </ul>
    *
-   * @param ctx      The property access node
+   * @param ctx The property access node
    * @param receiver The receiver value (must contain metaclass instances)
    * @return Collection of property values from all receiver instances
    */
@@ -2584,18 +2458,16 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Wraps a raw Java value from EMF's {@code eGet()} into an {@link OCLElement}.
    *
-   * <p>
-   * Type mapping:
+   * <p>Type mapping:
    *
    * <ul>
-   * <li>{@link String} → {@link OCLElement.StringValue}
-   * <li>{@link Integer} → {@link OCLElement.IntValue}
-   * <li>{@link Boolean} → {@link OCLElement.BoolValue}
-   * <li>{@link Float} → {@link OCLElement.FloatValue} (EMF {@code EFloat}
-   * attributes)
-   * <li>{@link Double} → {@link OCLElement.DoubleValue}
-   * <li>{@link EEnumLiteral} → {@link OCLElement.EnumValue}
-   * <li>{@link EObject} → {@link OCLElement.MetaclassValue}
+   *   <li>{@link String} → {@link OCLElement.StringValue}
+   *   <li>{@link Integer} → {@link OCLElement.IntValue}
+   *   <li>{@link Boolean} → {@link OCLElement.BoolValue}
+   *   <li>{@link Float} → {@link OCLElement.FloatValue} (EMF {@code EFloat} attributes)
+   *   <li>{@link Double} → {@link OCLElement.DoubleValue}
+   *   <li>{@link EEnumLiteral} → {@link OCLElement.EnumValue}
+   *   <li>{@link EObject} → {@link OCLElement.MetaclassValue}
    * </ul>
    *
    * @param value the raw Java value returned by {@code EObject.eGet(feature)}
@@ -2642,15 +2514,11 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code oclIsKindOf()} operation.
    *
-   * <p>
-   * Checks if each element in the receiver is an instance of the specified type
-   * or a subtype.
-   * For primitive types, uses Java {@code instanceof} semantics. For metaclasses,
-   * uses EMF
+   * <p>Checks if each element in the receiver is an instance of the specified type or a subtype.
+   * For primitive types, uses Java {@code instanceof} semantics. For metaclasses, uses EMF
    * inheritance.
    *
-   * <p>
-   * <b>Example:</b> {@code person.oclIsKindOf(Person)} → {@code true}
+   * <p><b>Example:</b> {@code person.oclIsKindOf(Person)} → {@code true}
    *
    * @param ctx The oclIsKindOf operation node
    * @return A collection of boolean values, one per receiver element
@@ -2679,9 +2547,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code oclIsTypeOf()} operation.
    *
-   * <p>
-   * Currently implemented identically to {@code oclIsKindOf()}. Proper
-   * implementation would
+   * <p>Currently implemented identically to {@code oclIsKindOf()}. Proper implementation would
    * check for exact type match (no subtypes).
    *
    * @param ctx The oclIsTypeOf operation node
@@ -2727,12 +2593,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Helper method to check if an element is of a given type.
    *
-   * <p>
-   * Implements type checking for both primitive types (Integer, String, Boolean,
-   * Double) and
+   * <p>Implements type checking for both primitive types (Integer, String, Boolean, Double) and
    * metaclass types (using EMF inheritance).
    *
-   * @param elem       The element to check
+   * @param elem The element to check
    * @param targetType The target type
    * @return true if the element is of the target type (or a subtype)
    */
@@ -2766,12 +2630,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Helper method to check if an element is of a given type.
    *
-   * <p>
-   * Implements type checking for both primitive types (Integer, String, Boolean,
-   * Double) and
+   * <p>Implements type checking for both primitive types (Integer, String, Boolean, Double) and
    * metaclass types (using EMF inheritance).
    *
-   * @param elem       The element to check
+   * @param elem The element to check
    * @param targetType The target type
    * @return true if the element is of the exact target type
    */
@@ -2803,16 +2665,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   // ==================== Cross-Metamodel Support ====================
 
   /**
-   * Evaluates fully qualified metaclass references (e.g.,
-   * {@code spaceMission::Spacecraft}).
+   * Evaluates fully qualified metaclass references (e.g., {@code spaceMission::Spacecraft}).
    *
-   * <p>
-   * This is the entry point for cross-metamodel constraints, allowing references
-   * to metaclasses
+   * <p>This is the entry point for cross-metamodel constraints, allowing references to metaclasses
    * from different metamodels using qualified names.
    *
-   * <p>
-   * <b>Example:</b> {@code satelliteSystem::Satellite.allInstances()}
+   * <p><b>Example:</b> {@code satelliteSystem::Satellite.allInstances()}
    *
    * @param ctx The prefixed qualified name node
    * @return The result of evaluating navigation on the qualified type
@@ -2842,18 +2700,15 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates collection literal expressions.
    *
-   * <p>
-   * Creates runtime collections from literal syntax like {@code Bag{1,2,3}} or
-   * {@code
+   * <p>Creates runtime collections from literal syntax like {@code Bag{1,2,3}} or {@code
    * Set{'a','b'}}.
    *
-   * <p>
-   * <b>Examples:</b>
+   * <p><b>Examples:</b>
    *
    * <ul>
-   * <li>{@code Bag{1,2,3}} → bag with 3 elements
-   * <li>{@code Set{1,2,2}} → set with 2 elements (duplicates removed)
-   * <li>{@code Sequence{1..5}} → sequence from 1 to 5
+   *   <li>{@code Bag{1,2,3}} → bag with 3 elements
+   *   <li>{@code Set{1,2,2}} → set with 2 elements (duplicates removed)
+   *   <li>{@code Sequence{1..5}} → sequence from 1 to 5
    * </ul>
    *
    * @param ctx The collection literal node
@@ -2882,9 +2737,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates collection literal arguments.
    *
-   * <p>
-   * Processes the elements inside collection literal braces, handling both
-   * individual values and
+   * <p>Processes the elements inside collection literal braces, handling both individual values and
    * ranges.
    *
    * @param ctx The collection arguments node
@@ -2905,12 +2758,11 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates a single collection literal part (element or range).
    *
-   * <p>
-   * Handles:
+   * <p>Handles:
    *
    * <ul>
-   * <li>Single values: {@code 42}
-   * <li>Ranges: {@code 1..10} (generates all integers in the range)
+   *   <li>Single values: {@code 42}
+   *   <li>Ranges: {@code 1..10} (generates all integers in the range)
    * </ul>
    *
    * @param ctx The collection literal part node
@@ -2961,13 +2813,10 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates the {@code lift()} operation.
    *
-   * <p>
-   * Wraps the receiver collection in a nested collection structure. Used for
-   * creating
+   * <p>Wraps the receiver collection in a nested collection structure. Used for creating
    * collections of collections.
    *
-   * <p>
-   * <b>Example:</b> {@code Bag{1,2,3}.lift()} → {@code Bag{Bag{1,2,3}}}
+   * <p><b>Example:</b> {@code Bag{1,2,3}.lift()} → {@code Bag{Bag{1,2,3}}}
    *
    * @param ctx The lift operation node
    * @return A singleton containing the receiver as a nested collection
@@ -2986,8 +2835,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates integer literals.
    *
-   * <p>
-   * <b>Example:</b> {@code 42} → singleton integer value
+   * <p><b>Example:</b> {@code 42} → singleton integer value
    *
    * @param ctx The number literal node
    * @return A singleton integer value
@@ -3004,8 +2852,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates string literals.
    *
-   * <p>
-   * <b>Example:</b> {@code 'hello'} → singleton string value
+   * <p><b>Example:</b> {@code 'hello'} → singleton string value
    *
    * @param ctx The string literal node
    * @return A singleton string value
@@ -3020,8 +2867,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates boolean literals.
    *
-   * <p>
-   * <b>Example:</b> {@code true} → singleton boolean value
+   * <p><b>Example:</b> {@code true} → singleton boolean value
    *
    * @param ctx The boolean literal node
    * @return A singleton boolean value
@@ -3038,9 +2884,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates {@code self} references.
    *
-   * <p>
-   * Returns the value bound to the special {@code self} variable, which
-   * represents the current
+   * <p>Returns the value bound to the special {@code self} variable, which represents the current
    * context instance in invariants.
    *
    * @param ctx The self expression node
@@ -3066,8 +2910,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates variable declarations in let expressions.
    *
-   * <p>
-   * Binds the variable to its initializer value in the symbol table.
+   * <p>Binds the variable to its initializer value in the symbol table.
    *
    * @param ctx The variable declaration node
    * @return The initializer value
@@ -3102,9 +2945,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates nested (parenthesized) expressions.
    *
-   * <p>
-   * <b>Example:</b> {@code (1 + 2) * 3} - the {@code (1 + 2)} part is a nested
-   * expression.
+   * <p><b>Example:</b> {@code (1 + 2) * 3} - the {@code (1 + 2)} part is a nested expression.
    *
    * @param ctx The nested expression node
    * @return The value of the last expression in the parentheses
@@ -3206,24 +3047,18 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates correspondence operator (~).
    *
-   * <p>
-   * Checks if two objects are related via a Correspondence model instance.
-   * Searches through all
-   * loaded Correspondence objects to find a relationship between the left and
-   * right operands.
+   * <p>Checks if two objects are related via a Correspondence model instance. Searches through all
+   * loaded Correspondence objects to find a relationship between the left and right operands.
    *
-   * <p>
-   * <b>Algorithm:</b>
+   * <p><b>Algorithm:</b>
    *
    * <ol>
-   * <li>Evaluate both operands to get EObject instances
-   * <li>Get all Correspondence objects from loaded models
-   * <li>For each Correspondence, check if leftEObjects contains obj1 and
-   * rightEObjects contains
-   * obj2
-   * <li>Also check reverse: leftEObjects contains obj2 and rightEObjects contains
-   * obj1
-   * <li>Return true if any correspondence found, false otherwise
+   *   <li>Evaluate both operands to get EObject instances
+   *   <li>Get all Correspondence objects from loaded models
+   *   <li>For each Correspondence, check if leftEObjects contains obj1 and rightEObjects contains
+   *       obj2
+   *   <li>Also check reverse: leftEObjects contains obj2 and rightEObjects contains obj1
+   *   <li>Return true if any correspondence found, false otherwise
    * </ol>
    *
    * @param ctx Correspondence expression context
@@ -3256,11 +3091,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Checks if two EObjects are related via a Correspondence.
    *
-   * <p>
-   * Searches all Correspondence objects loaded in the VSUM for a relationship
-   * between obj1 and
-   * obj2. The correspondence is bidirectional: obj1 can appear in leftEObjects or
-   * rightEObjects.
+   * <p>Searches all Correspondence objects loaded in the VSUM for a relationship between obj1 and
+   * obj2. The correspondence is bidirectional: obj1 can appear in leftEObjects or rightEObjects.
    *
    * @param obj1 First object
    * @param obj2 Second object
@@ -3272,7 +3104,8 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
     for (EObject root : allRoots) {
       if (root.eClass().getName().equals("Correspondences")) {
 
-        EStructuralFeature correspondencesFeature = root.eClass().getEStructuralFeature("correspondences");
+        EStructuralFeature correspondencesFeature =
+            root.eClass().getEStructuralFeature("correspondences");
 
         if (correspondencesFeature != null) {
           Object value = root.eGet(correspondencesFeature);
@@ -3296,19 +3129,18 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Checks if a Correspondence object contains both obj1 and obj2.
    *
-   * <p>
-   * A Correspondence has leftEObjects and rightEObjects features. This method
-   * checks if (obj1 in
+   * <p>A Correspondence has leftEObjects and rightEObjects features. This method checks if (obj1 in
    * left AND obj2 in right) OR (obj2 in left AND obj1 in right).
    *
    * @param correspondence The Correspondence object to check
-   * @param obj1           First object
-   * @param obj2           Second object
+   * @param obj1 First object
+   * @param obj2 Second object
    * @return true if correspondence relates obj1 and obj2
    */
   private boolean correspondenceContainsBoth(EObject correspondence, EObject obj1, EObject obj2) {
     EStructuralFeature leftFeature = correspondence.eClass().getEStructuralFeature("leftEObjects");
-    EStructuralFeature rightFeature = correspondence.eClass().getEStructuralFeature("rightEObjects");
+    EStructuralFeature rightFeature =
+        correspondence.eClass().getEStructuralFeature("rightEObjects");
 
     if (leftFeature == null || rightFeature == null) {
       return false;
@@ -3349,16 +3181,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates select(~) shorthand for correspondence filtering.
    *
-   * <p>
-   * Desugars to: {@code select(x | self ~ x)}
+   * <p>Desugars to: {@code select(x | self ~ x)}
    *
-   * <p>
-   * Filters the receiver collection to keep only elements that correspond to
-   * 'self' according to
+   * <p>Filters the receiver collection to keep only elements that correspond to 'self' according to
    * the loaded Correspondence model instances.
    *
-   * <p>
-   * <b>Example:</b>
+   * <p><b>Example:</b>
    *
    * <pre>{@code
    * context Spacecraft inv:
@@ -3403,16 +3231,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates reject(~) shorthand for inverse correspondence filtering.
    *
-   * <p>
-   * Desugars to: {@code reject(x | self ~ x)}
+   * <p>Desugars to: {@code reject(x | self ~ x)}
    *
-   * <p>
-   * Filters the receiver collection to keep only elements that do NOT correspond
-   * to 'self'
+   * <p>Filters the receiver collection to keep only elements that do NOT correspond to 'self'
    * according to the loaded Correspondence model instances.
    *
-   * <p>
-   * <b>Example:</b>
+   * <p><b>Example:</b>
    *
    * <pre>{@code
    * context Satellite inv:
@@ -3420,8 +3244,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
    * }</pre>
    *
    * @param ctx The reject(~) operation node
-   * @return Filtered collection containing only elements NOT corresponding to
-   *         'self'
+   * @return Filtered collection containing only elements NOT corresponding to 'self'
    */
   @Override
   public Value visitRejectCorrespondence(OCLParser.RejectCorrespondenceContext ctx) {
@@ -3458,17 +3281,12 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Evaluates exists(~) shorthand for correspondence existence check.
    *
-   * <p>
-   * Desugars to: {@code exists(x | self ~ x)}
+   * <p>Desugars to: {@code exists(x | self ~ x)}
    *
-   * <p>
-   * Returns true if at least one element in the receiver collection corresponds
-   * to 'self'
-   * according to the loaded Correspondence model instances. Short-circuits on
-   * first match.
+   * <p>Returns true if at least one element in the receiver collection corresponds to 'self'
+   * according to the loaded Correspondence model instances. Short-circuits on first match.
    *
-   * <p>
-   * <b>Example:</b>
+   * <p><b>Example:</b>
    *
    * <pre>{@code
    * context Spacecraft inv:
@@ -3476,8 +3294,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
    * }</pre>
    *
    * @param ctx The exists(~) operation node
-   * @return Singleton Boolean: true if any element corresponds to 'self', false
-   *         otherwise
+   * @return Singleton Boolean: true if any element corresponds to 'self', false otherwise
    */
   @Override
   public Value visitExistsCorrespondence(OCLParser.ExistsCorrespondenceContext ctx) {
@@ -3514,8 +3331,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Placeholder for message operator (^).
    *
-   * <p>
-   * Not yet implemented - reports error.
+   * <p>Not yet implemented - reports error.
    */
   @Override
   public Value visitMessage(OCLParser.MessageContext ctx) {
@@ -3580,9 +3396,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Error: navigation chain visited without receiver context.
    *
-   * <p>
-   * This should never be reached - navigation chains should always be visited via
-   * {@link
+   * <p>This should never be reached - navigation chains should always be visited via {@link
    * #visitNavigationWithReceiver}.
    */
   @Override
@@ -3593,8 +3407,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Error: property access visited without receiver context.
    *
-   * <p>
-   * Should be visited via {@link #visitPropertyAccessWithReceiver}.
+   * <p>Should be visited via {@link #visitPropertyAccessWithReceiver}.
    */
   @Override
   public Value visitPropertyNav(OCLParser.PropertyNavContext ctx) {
@@ -3604,8 +3417,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Error: operation call visited without receiver context.
    *
-   * <p>
-   * Should be visited via {@link #visitOperationCallWithReceiver}.
+   * <p>Should be visited via {@link #visitOperationCallWithReceiver}.
    */
   @Override
   public Value visitOperationNav(OCLParser.OperationNavContext ctx) {
@@ -3615,8 +3427,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Error: property access visited without receiver.
    *
-   * <p>
-   * Should be visited via {@link #visitPropertyAccessWithReceiver}.
+   * <p>Should be visited via {@link #visitPropertyAccessWithReceiver}.
    */
   @Override
   public Value visitPropertyAccess(OCLParser.PropertyAccessContext ctx) {
@@ -3659,15 +3470,11 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Normalizes a type to its singleton ctype.
    *
-   * <p>
-   * Every expression has a ctype χ = τ[l,r](μ,ω). Bare primitive types (INTEGER,
-   * STRING, etc.)
-   * and bare metaclass types are implicitly ¡T![1,1]. This method makes that
-   * wrapping explicit so
+   * <p>Every expression has a ctype χ = τ[l,r](μ,ω). Bare primitive types (INTEGER, STRING, etc.)
+   * and bare metaclass types are implicitly ¡T![1,1]. This method makes that wrapping explicit so
    * all downstream operations can rely on it.
    *
-   * <p>
-   * Multi-valued collections ({T}, [T], etc.) are returned unchanged.
+   * <p>Multi-valued collections ({T}, [T], etc.) are returned unchanged.
    *
    * @param t the type to normalize
    * @return ¡t! if t is a bare scalar, t unchanged if already wrapped
@@ -3691,9 +3498,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
   /**
    * Unwraps one level of collection/singleton to get the scalar member type.
    *
-   * <p>
-   * Used when an operation needs to work on the member type τ of a ctype χ =
-   * τ[l,r].
+   * <p>Used when an operation needs to work on the member type τ of a ctype χ = τ[l,r].
    *
    * @param t the ctype to unwrap
    * @return the member type τ, or t if it has no wrapper

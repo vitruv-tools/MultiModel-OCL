@@ -312,4 +312,28 @@ public abstract class DummyTestSpecification {
       }
     };
   }
+
+  /**
+   * Asserts that the result is a singleton containing a single double or float value (within
+   * epsilon).
+   *
+   * @param result The evaluated collection value
+   * @param expected The expected double value
+   */
+  protected void assertSingleDouble(Value result, double expected) {
+    assertEquals(1, result.size(), "Expected singleton result");
+    OCLElement elem = result.getElements().get(0);
+    double actual;
+    if (elem.tryGetDouble() != null) {
+      actual = elem.tryGetDouble();
+    } else if (elem.tryGetFloat() != null) {
+      actual = elem.tryGetFloat();
+    } else if (elem.tryGetInt() != null) {
+      actual = elem.tryGetInt();
+    } else {
+      fail("Expected numeric singleton but got: " + elem);
+      return;
+    }
+    assertEquals(expected, actual, 1e-9, "Expected double value " + expected);
+  }
 }
