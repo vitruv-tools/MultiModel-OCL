@@ -15,6 +15,7 @@ package tools.vitruv.multimodelocl.pipeline;
 import java.util.List;
 import java.util.Set;
 import org.eclipse.emf.ecore.EClass;
+import org.eclipse.emf.ecore.EEnum;
 import org.eclipse.emf.ecore.EObject;
 
 /**
@@ -39,6 +40,14 @@ public interface MetamodelWrapperInterface {
    * @return List of all instances
    */
   List<EObject> getAllInstances(EClass eClass);
+
+  /**
+   * * Resolves an EEnum by qualified name.
+   *
+   * @param enumName The qualified name of the enum (e.g., "UML.VisibilityKind")
+   * @return The resolved EEnum, or null if not found
+   */
+  public EEnum resolveEEnum(String enumName);
 
   /**
    * Returns names of all available metamodels.
@@ -85,4 +94,28 @@ public interface MetamodelWrapperInterface {
    * @return the matching EClass, or {@code null} if not found in any loaded metamodel
    */
   EClass resolveEClassByShortName(String shortName);
+
+  /**
+   * Returns all objects corresponding to the given source object.
+   *
+   * <p>Searches all loaded Correspondence model instances for a bidirectional relationship
+   * involving {@code source} and returns all objects on the other side.
+   *
+   * @param source the source object to look up correspondences for
+   * @return set of all corresponding objects; empty if none exist
+   */
+  Set<EObject> getCorrespondingObjects(EObject source);
+
+  /**
+   * Checks whether a correspondence between {@code obj1} and {@code obj2} carries the given tag.
+   *
+   * <p>The check is bidirectional: {@code obj1} may appear in {@code leftEObjects} or {@code
+   * rightEObjects} of the correspondence.
+   *
+   * @param obj1 one side of the correspondence
+   * @param obj2 other side of the correspondence
+   * @param tag the required tag value
+   * @return true if a correspondence with that exact tag relates obj1 and obj2
+   */
+  boolean correspondenceHasTag(EObject obj1, EObject obj2, String tag);
 }

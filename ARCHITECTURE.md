@@ -1,10 +1,10 @@
-# VitruvOCL Architecture
+# OCL Architecture
 
 ## Overview
 3-pass compiler: Parse → Type Check → Evaluate
 
 ## Directory Structure
-- `grammar/` - ANTLR4 grammar (VitruvOCL.g4)
+- `grammar/` - ANTLR4 grammar (OCL.g4)
 - `symboltable/` - Symbol table, scopes, variable bindings
 - `typechecker/` - Pass 2: Type checking visitor
 - `evaluator/` - Pass 3: Runtime evaluation, Value system

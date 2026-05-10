@@ -11,7 +11,7 @@
  * Contributors:
  *    Ralph Gerbig - initial API and implementation and initial documentation
  *    Arne Lange - ocl2 implementation
- *    Max Oesterle - MultiModelOCL implementation, extensive refactoring and extensions
+ *    Max Oesterle - OCL implementation, extensive refactoring and extensions
  *******************************************************************************/
 grammar OCL;
 
@@ -77,6 +77,7 @@ typeNameExpCS
     metamodel=ID COLONCOLON className=ID
     | unqualified=ID
 ;
+
 // ============================================================================
 // EXPRESSIONS
 // ============================================================================
@@ -97,7 +98,6 @@ infixedExpCS
     prefixedExpCS                                                           # prefixedExpr
     | left=infixedExpCS op=('*'|'/') right=infixedExpCS                    # multiplicative
     | left=infixedExpCS op=('+'|'-') right=infixedExpCS                    # additive
-    | left=infixedExpCS op='~' right=infixedExpCS                          # correspondence
     | left=infixedExpCS op='==' right=infixedExpCS                         # equalityComparison
     | left=infixedExpCS op='!=' right=infixedExpCS                         # inequalityComparison
     | left=infixedExpCS op='<' right=infixedExpCS                          # lessThanComparison
@@ -109,6 +109,7 @@ infixedExpCS
     | left=infixedExpCS op='or' right=infixedExpCS                         # logicalOr
     | left=infixedExpCS op='xor' right=infixedExpCS                        # logicalXor
     | left=infixedExpCS op='implies' right=infixedExpCS                    # implication
+    | left=infixedExpCS op=ID right=infixedExpCS                           # unknownBinaryOp
 ;
 
 // Prefix operations and navigation
@@ -117,7 +118,7 @@ prefixedExpCS
     base=primaryExpCS navigation=navigationChainCS*                         # primaryWithNav
     | '-' operand=prefixedExpCS                                             # unaryMinus
     | 'not' operand=prefixedExpCS                                           # logicalNot
-    | metamodel=ID '::' className=ID navigation=navigationChainCS+         # prefixedQualified
+    | metamodel=ID '::' className=ID navigation=navigationChainCS*         # prefixedQualified
 ;
 
 navigationChainCS
@@ -232,6 +233,16 @@ operationCall
     | stringOpCS     # stringOperation
     | iteratorOpCS   # iteratorOperation
     | typeOpCS       # typeOperation
+    | unknownOpCS    # unknownOperation
+;
+
+// Catch-all for operation calls whose name is not a recognised keyword.
+// Parsing this rule (instead of failing at ')') lets the type checker report
+// a precise "Unknown operation 'X'" diagnostic on the name token rather than
+// the cryptic ANTLR "mismatched input ')'" error on the closing parenthesis.
+unknownOpCS
+:
+    opName=ID '(' (args+=expCS (',' args+=expCS)*)? ')'
 ;
 
 // ============================================================================
@@ -240,29 +251,45 @@ operationCall
 
 collectionOpCS
 :
-    'including' '(' arg=expCS ')'      # includingOp
-    | 'excluding' '(' arg=expCS ')'    # excludingOp
-    | 'includes' '(' arg=expCS ')'     # includesOp
-    | 'excludes' '(' arg=expCS ')'     # excludesOp
-    | 'flatten' '(' ')'                # flattenOp
-    | 'union' '(' arg=expCS ')'        # unionOp
-    | 'append' '(' arg=expCS ')'       # appendOp
-    | 'sum' '(' ')'                    # sumOp
-    | 'max' '(' ')'                    # maxOp
-    | 'min' '(' ')'                    # minOp
-    | 'avg' '(' ')'                    # avgOp
-    | 'abs' '(' ')'                    # absOp
-    | 'floor' '(' ')'                  # floorOp
-    | 'ceil' '(' ')'                   # ceilOp
-    | 'round' '(' ')'                  # roundOp
-    | 'lift' '(' ')'                   # liftOp
-    | 'size' '(' ')'                   # sizeOp
-    | 'isEmpty' '(' ')'                # isEmptyOp
-    | 'notEmpty' '(' ')'               # notEmptyOp
-    | 'first' '(' ')'                  # firstOp
-    | 'last' '(' ')'                   # lastOp
-    | 'reverse' '(' ')'                # reverseOp
-    | 'allInstances' '(' ')'           # allInstancesOp
+    'including' '(' arg=expCS ')'                                          # includingOp
+    | 'excluding' '(' arg=expCS ')'                                        # excludingOp
+    | 'includes' '(' arg=expCS ')'                                         # includesOp
+    | 'excludes' '(' arg=expCS ')'                                         # excludesOp
+    | 'includesAll' '(' arg=expCS ')'                                      # includesAllOp
+    | 'excludesAll' '(' arg=expCS ')'                                      # excludesAllOp
+    | 'count' '(' arg=expCS ')'                                            # countOp
+    | 'flatten' '(' ')'                                                    # flattenOp
+    | 'union' '(' arg=expCS ')'                                            # unionOp
+    | 'intersection' '(' arg=expCS ')'                                     # intersectionOp
+    | 'symmetricDifference' '(' arg=expCS ')'                              # symmetricDifferenceOp
+    | 'append' '(' arg=expCS ')'                                           # appendOp
+    | 'prepend' '(' arg=expCS ')'                                          # prependOp
+    | 'insertAt' '(' index=expCS ',' arg=expCS ')'                        # insertAtOp
+    | 'subSequence' '(' start=expCS ',' end=expCS ')'                     # subSequenceOp
+    | 'at' '(' index=expCS ')'                                             # atOp
+    | 'sum' '(' ')'                                                        # sumOp
+    | 'max' '(' ')'                                                        # maxOp
+    | 'min' '(' ')'                                                        # minOp
+    | 'avg' '(' ')'                                                        # avgOp
+    | 'abs' '(' ')'                                                        # absOp
+    | 'floor' '(' ')'                                                      # floorOp
+    | 'ceil' '(' ')'                                                       # ceilOp
+    | 'ceiling' '(' ')'                                                    # ceilingOp
+    | 'round' '(' ')'                                                      # roundOp
+    | 'div' '(' arg=expCS ')'                                              # divOp
+    | 'mod' '(' arg=expCS ')'                                              # modOp
+    | 'lift' '(' ')'                                                       # liftOp
+    | 'size' '(' ')'                                                       # sizeOp
+    | 'isEmpty' '(' ')'                                                    # isEmptyOp
+    | 'notEmpty' '(' ')'                                                   # notEmptyOp
+    | 'first' '(' ')'                                                      # firstOp
+    | 'last' '(' ')'                                                       # lastOp
+    | 'reverse' '(' ')'                                                    # reverseOp
+    | 'allInstances' '(' ')'                                               # allInstancesOp
+    | 'asSet' '(' ')'                                                      # asSetOp
+    | 'asBag' '(' ')'                                                      # asBagOp
+    | 'asSequence' '(' ')'                                                 # asSequenceOp
+    | 'asOrderedSet' '(' ')'                                               # asOrderedSetOp
 ;
 
 // ============================================================================
@@ -271,14 +298,23 @@ collectionOpCS
 
 iteratorOpCS
 :
-    'select' '(' '~' ')'                                            # selectCorrespondence
-    | 'reject' '(' '~' ')'                                          # rejectCorrespondence
-    | 'exists' '(' '~' ')'                                          # existsCorrespondence 
-    | 'select' '(' iteratorVars=iteratorVarList '|' body=expCS ')'  # selectOp
-    | 'reject' '(' iteratorVars=iteratorVarList '|' body=expCS ')'  # rejectOp                                  
-    | 'collect' '(' iteratorVars=iteratorVarList '|' body=expCS ')' # collectOp
-    | 'forAll' '(' iteratorVars=iteratorVarList '|' body=expCS ')'  # forAllOp
-    | 'exists' '(' iteratorVars=iteratorVarList '|' body=expCS ')'  # existsOp
+    'select' '(' iteratorVars=iteratorVarList '|' body=expCS ')'                  # selectOp
+    | 'reject' '(' iteratorVars=iteratorVarList '|' body=expCS ')'                # rejectOp
+    | 'collect' '(' iteratorVars=iteratorVarList '|' body=expCS ')'               # collectOp
+    | 'forAll' '(' iteratorVars=iteratorVarList '|' body=expCS ')'                # forAllOp
+    | 'exists' '(' iteratorVars=iteratorVarList '|' body=expCS ')'                # existsOp
+    | 'one' '(' iteratorVars=iteratorVarList '|' body=expCS ')'                   # oneOp
+    | 'any' '(' iteratorVars=iteratorVarList '|' body=expCS ')'                   # anyOp
+    | 'isUnique' '(' iteratorVars=iteratorVarList '|' body=expCS ')'              # isUniqueOp
+    | 'sortedBy' '(' iteratorVars=iteratorVarList '|' body=expCS ')'              # sortedByOp
+    | 'collectNested' '(' iteratorVars=iteratorVarList '|' body=expCS ')'         # collectNestedOp
+    | 'iterate' '(' iterateVarSpec '|' body=expCS ')'                             # iterateOp
+;
+
+// iterate(elem; acc : Type = initExpr | body)
+iterateVarSpec
+:
+    iterVar=ID ';' accVar=ID (':' accType=typeExpCS)? '=' accInit=expCS
 ;
 
 iteratorVarList
@@ -292,12 +328,20 @@ iteratorVarList
 
 stringOpCS
 :
-    'concat' '(' arg=expCS ')'                              # concatOp
-    | 'substring' '(' start=expCS ',' end=expCS ')'        # substringOp
-    | 'toUpper' '(' ')'                                     # toUpperOp
-    | 'toLower' '(' ')'                                     # toLowerOp
-    | 'indexOf' '(' arg=expCS ')'                          # indexOfOp
-    | 'equalsIgnoreCase' '(' arg=expCS ')'                 # equalsIgnoreCaseOp
+    'concat' '(' arg=expCS ')'                                             # concatOp
+    | 'length' '(' ')'                                                     # lengthOp
+    | 'substring' '(' start=expCS ',' end=expCS ')'                       # substringOp
+    | 'toUpper' '(' ')'                                                    # toUpperOp
+    | 'toLower' '(' ')'                                                    # toLowerOp
+    | 'indexOf' '(' arg=expCS ')'                                          # indexOfOp
+    | 'equalsIgnoreCase' '(' arg=expCS ')'                                 # equalsIgnoreCaseOp
+    | 'toInteger' '(' ')'                                                  # toIntegerOp
+    | 'toReal' '(' ')'                                                     # toRealOp
+    | 'characters' '(' ')'                                                 # charactersOp
+    | 'matches' '(' arg=expCS ')'                                          # matchesOp
+    | 'substituteAll' '(' pattern=expCS ',' replacement=expCS ')'         # substituteAllOp
+    | 'substituteFirst' '(' pattern=expCS ',' replacement=expCS ')'       # substituteFirstOp
+    | 'tokenize' '(' arg=expCS ')'                                         # tokenizeOp
 ;
 
 // ============================================================================

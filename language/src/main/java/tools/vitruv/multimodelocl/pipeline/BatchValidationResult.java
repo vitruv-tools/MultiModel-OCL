@@ -15,7 +15,7 @@ package tools.vitruv.multimodelocl.pipeline;
 import java.util.*;
 
 /**
- * Aggregated results from validating multiple VitruvOCL constraints.
+ * Aggregated results from validating multiple OCL constraints.
  *
  * <p>Provides comprehensive analysis of batch validation including:
  *

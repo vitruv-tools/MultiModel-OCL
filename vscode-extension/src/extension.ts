@@ -3,6 +3,11 @@ import * as child_process from 'child_process';
 import * as util from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import {
+    LanguageClient,
+    LanguageClientOptions,
+    ServerOptions,
+} from 'vscode-languageclient/node';
 
 const execFile = util.promisify(child_process.execFile);
 
@@ -10,6 +15,7 @@ const constraintResults = new Map<string, ConstraintStatus>();
 let codeLensProvider: OCLCodeLensProvider;
 let currentDecorations: Map<string, vscode.TextEditorDecorationType> = new Map();
 let diagnosticCollection: vscode.DiagnosticCollection;
+let languageClient: LanguageClient | undefined;
 
 interface ConstraintStatus {
     name: string;
@@ -37,7 +43,30 @@ interface ConstraintBatchResult {
     warnings?: string[];
 }
 
+async function applyThemeOnFirstInstall(context: vscode.ExtensionContext): Promise<void> {
+    const THEME_KEY = 'multimodelocl.themeApplied';
+    const alreadyApplied = context.globalState.get<boolean>(THEME_KEY, false);
+    if (alreadyApplied) {
+        return;
+    }
+    const config = vscode.workspace.getConfiguration();
+    const currentTheme = config.get<string>('workbench.colorTheme');
+    if (currentTheme === 'MultiModelOCL Dark') {
+        await context.globalState.update(THEME_KEY, true);
+        return;
+    }
+    const answer = await vscode.window.showInformationMessage(
+        'MultiModelOCL: Apply the included "MultiModelOCL Dark" theme for optimized syntax highlighting?',
+        'Yes', 'No'
+    );
+    if (answer === 'Yes') {
+        await config.update('workbench.colorTheme', 'MultiModelOCL Dark', vscode.ConfigurationTarget.Global);
+    }
+    await context.globalState.update(THEME_KEY, true);
+}
+
 export function activate(context: vscode.ExtensionContext) {
+    applyThemeOnFirstInstall(context);
     diagnosticCollection = vscode.languages.createDiagnosticCollection('multimodelocl');
     context.subscriptions.push(diagnosticCollection);
 
@@ -85,6 +114,9 @@ export function activate(context: vscode.ExtensionContext) {
         updateGutterIcons(vscode.window.activeTextEditor);
         updateInlineErrors(vscode.window.activeTextEditor);
     }
+
+    // Start the language server for live diagnostics, completion, and hover.
+    startLanguageClient(context);
 }
 
 function updateGutterIcons(editor: vscode.TextEditor) {
@@ -689,6 +721,55 @@ function showSummaryResult(passed: number, failed: number, constraints: Constrai
     }
 }
 
-export function deactivate() {
+export function deactivate(): Thenable<void> | undefined {
     currentDecorations.forEach(decoration => decoration.dispose());
+    return languageClient?.stop();
+}
+
+// ---------------------------------------------------------------------------
+// Language client (LSP)
+// ---------------------------------------------------------------------------
+
+function startLanguageClient(context: vscode.ExtensionContext): void {
+    const serverJar = findLanguageServerJar(context);
+    if (!serverJar) {
+        console.warn('[OCL-LS] language-server.jar not found — LSP features disabled.');
+        return;
+    }
+
+    const serverOptions: ServerOptions = {
+        command: 'java',
+        args: ['-jar', serverJar],
+    };
+
+    const clientOptions: LanguageClientOptions = {
+        documentSelector: [{ language: 'multimodelocl' }],
+        synchronize: {
+            // Watch .ecore files so the server can react to metamodel changes (Phase 2).
+            fileEvents: vscode.workspace.createFileSystemWatcher('**/*.ecore'),
+        },
+    };
+
+    languageClient = new LanguageClient(
+        'multimodelocl-ls',
+        'MultiModel OCL Language Server',
+        serverOptions,
+        clientOptions
+    );
+
+    languageClient.start();
+    context.subscriptions.push(languageClient);
+}
+
+function findLanguageServerJar(context: vscode.ExtensionContext): string | null {
+    // 1. User-configured path.
+    const config = vscode.workspace.getConfiguration('multimodelocl');
+    const configured = config.get<string>('languageServerPath');
+    if (configured && fs.existsSync(configured)) return configured;
+
+    // 2. Bundled alongside the extension in lib/.
+    const bundled = path.join(context.extensionPath, 'lib', 'language-server.jar');
+    if (fs.existsSync(bundled)) return bundled;
+
+    return null;
 }

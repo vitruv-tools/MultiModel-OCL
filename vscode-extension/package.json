@@ -35,6 +35,13 @@
         "path": "./syntaxes/multimodelocl.tmLanguage.json"
       }
     ],
+    "themes": [
+      {
+        "label": "MultiModelOCL Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/multimodelocl-dark.json"
+      }
+    ],
     "views": {
       "test": [
         {
@@ -93,6 +100,11 @@
           "type": "string",
           "default": "",
           "description": "Path to multimodelocl.jar (leave empty for auto-detection)"
+        },
+        "multimodelocl.languageServerPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to language-server.jar (leave empty for auto-detection from lib/)"
         }
       }
     }
@@ -102,6 +114,9 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

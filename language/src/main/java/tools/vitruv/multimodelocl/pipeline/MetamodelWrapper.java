@@ -20,11 +20,12 @@ import org.eclipse.emf.ecore.*;
 import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.emf.ecore.resource.ResourceSet;
 import org.eclipse.emf.ecore.resource.impl.ResourceSetImpl;
+import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.emf.ecore.xmi.impl.EcoreResourceFactoryImpl;
 import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;
 
 /**
- * Manages metamodel and model instance loading for VitruvOCL constraint evaluation.
+ * Manages metamodel and model instance loading for OCL constraint evaluation.
  *
  * <p>Provides metamodel-to-instance mapping required for constraint evaluation, supporting:
  *
@@ -124,6 +125,56 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   }
 
   /**
+   * Reloads a previously loaded metamodel from disk, replacing the old version in the registry.
+   *
+   * <p>If the file was not previously loaded this behaves identically to {@link
+   * #loadMetamodel(Path)}. Call this when the {@code .ecore} file has been modified on disk (e.g.
+   * triggered by a {@code workspace/didChangeWatchedFiles} event from the language client).
+   *
+   * @param ecoreFile path to the modified {@code .ecore} file
+   * @throws IOException if the file cannot be read or is empty after modification
+   */
+  public void reloadMetamodel(Path ecoreFile) throws IOException {
+    unloadMetamodel(ecoreFile);
+    loadMetamodel(ecoreFile);
+  }
+
+  /**
+   * Removes a previously loaded metamodel from the registry and the EMF resource set.
+   *
+   * <p>The package is also removed from {@link EPackage.Registry#INSTANCE} so that subsequent loads
+   * start from a clean state. No-op if the file was never loaded.
+   *
+   * @param ecoreFile path to the {@code .ecore} file to remove
+   */
+  public void unloadMetamodel(Path ecoreFile) {
+    String targetUri = URI.createFileURI(ecoreFile.toAbsolutePath().toString()).toString();
+
+    // Find the cached Resource in the ResourceSet by URI.
+    Resource toRemove = null;
+    for (Resource res : new ArrayList<>(resourceSet.getResources())) {
+      if (res.getURI().toString().equals(targetUri)) {
+        toRemove = res;
+        break;
+      }
+    }
+
+    if (toRemove == null) return; // file was never loaded — nothing to do
+
+    // Remove the EPackage from our registry and from the global EMF registry.
+    if (!toRemove.getContents().isEmpty()
+        && toRemove.getContents().get(0) instanceof EPackage pkg) {
+      metamodelRegistry.remove(pkg.getName());
+      if (pkg.getNsURI() != null) {
+        EPackage.Registry.INSTANCE.remove(pkg.getNsURI());
+      }
+    }
+
+    toRemove.unload();
+    resourceSet.getResources().remove(toRemove);
+  }
+
+  /**
    * Loads model instance from absolute path, indexing all objects by EClass.
    *
    * @param xmiPath Absolute path to XMI model file
@@ -205,7 +256,6 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   public EClass resolveEClass(String metamodelName, String className) {
     EPackage ePackage = metamodelRegistry.get(metamodelName);
     if (ePackage == null) {
-      System.err.println("MetaModelRegistry: " + metamodelRegistry);
       return null;
     }
 
@@ -324,6 +374,63 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   }
 
   /**
+   * Resolves an {@link EEnum} by name across all registered metamodel packages.
+   *
+   * <p>Searches each {@link EPackage} in the metamodel registry in iteration order, delegating to
+   * {@link #resolveEEnumInPackage} for each package. Returns the first match found, or {@code null}
+   * if no {@code EEnum} with the given name exists in any registered package.
+   *
+   * @param enumName the simple name of the {@code EEnum} to resolve
+   * @return the first matching {@link EEnum}, or {@code null} if not found
+   */
+  @Override
+  public EEnum resolveEEnum(String enumName) {
+    for (EPackage ePackage : metamodelRegistry.values()) {
+      EEnum found = resolveEEnumInPackage(ePackage, enumName);
+      if (found != null) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Resolves an {@link EEnum} by name within an {@link EPackage} and its subpackages.
+   *
+   * <p>Searches the package's classifiers for an {@code EEnum} with the given name, then recurses
+   * into subpackages if no match is found.
+   *
+   * @param ePackage the root package to search in
+   * @param enumName the name of the enum to resolve
+   * @return the matching {@link EEnum}, or {@code null} if not found
+   */
+  private EEnum resolveEEnumInPackage(EPackage ePackage, String enumName) {
+    for (EClassifier classifier : ePackage.getEClassifiers()) {
+      if (classifier instanceof EEnum eEnum && eEnum.getName().equals(enumName)) {
+        return eEnum;
+      }
+    }
+    for (EPackage subPackage : ePackage.getESubpackages()) {
+      EEnum found = resolveEEnumInPackage(subPackage, enumName);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
+  /**
+   * Returns the EPackage registered under the given metamodel name.
+   *
+   * <p>Used by the language server completion provider to enumerate all EClass names within a
+   * package (e.g., for {@code JavaMM::} prefix completion).
+   *
+   * @param metamodelName the package name (e.g., {@code "JavaMM"})
+   * @return the registered {@link EPackage}, or {@code null} if not found
+   */
+  public EPackage getEPackage(String metamodelName) {
+    return metamodelRegistry.get(metamodelName);
+  }
+
+  /**
    * Searches {@code ePackage} and its direct subpackages for an {@link EClass} with the given short
    * name.
    *
@@ -345,5 +452,127 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
       }
     }
     return null;
+  }
+
+  /**
+   * Returns all EObjects corresponding to the given source object.
+   *
+   * <p>Searches all loaded Correspondence objects across all resources in the resource set. A
+   * Correspondence relates {@code source} to other objects if {@code source} appears in {@code
+   * leftEObjects} or {@code rightEObjects}. Cross-resource proxy references are resolved via {@link
+   * EcoreUtil#resolve(EObject, org.eclipse.emf.ecore.resource.ResourceSet)}.
+   *
+   * @param source the source object to look up correspondences for
+   * @return set of all corresponding objects; empty if none exist
+   */
+  @Override
+  public Set<EObject> getCorrespondingObjects(EObject source) {
+    Set<EObject> result = new LinkedHashSet<>();
+    for (EObject corrObj : getCorrespondenceObjects()) {
+      List<EObject> lefts = resolveAll(safeGetList(corrObj, "leftEObjects"));
+      List<EObject> rights = resolveAll(safeGetList(corrObj, "rightEObjects"));
+      if (lefts == null || rights == null) continue;
+      if (lefts.contains(source)) result.addAll(rights);
+      if (rights.contains(source)) result.addAll(lefts);
+    }
+    return result;
+  }
+
+  /**
+   * Checks whether a correspondence between {@code obj1} and {@code obj2} carries the given tag.
+   *
+   * <p>Searches all loaded Correspondence objects. The check is bidirectional: {@code obj1} may
+   * appear in {@code leftEObjects} or {@code rightEObjects}. Cross-resource proxy references are
+   * resolved before comparison.
+   *
+   * @param obj1 one side of the correspondence
+   * @param obj2 other side of the correspondence
+   * @param tag the required tag value
+   * @return true if a correspondence with that exact tag relates obj1 and obj2
+   */
+  @Override
+  public boolean correspondenceHasTag(EObject obj1, EObject obj2, String tag) {
+    for (EObject corrObj : getCorrespondenceObjects()) {
+      List<EObject> lefts = resolveAll(safeGetList(corrObj, "leftEObjects"));
+      List<EObject> rights = resolveAll(safeGetList(corrObj, "rightEObjects"));
+      String corrTag = (String) safeGet(corrObj, "tag");
+      if (lefts == null || rights == null) continue;
+      boolean matches =
+          (lefts.contains(obj1) && rights.contains(obj2))
+              || (lefts.contains(obj2) && rights.contains(obj1));
+      if (matches && tag.equals(corrTag)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Collects all Correspondence objects from all loaded resources in the resource set.
+   *
+   * <p>A Correspondence root is identified by the presence of a {@code correspondences} structural
+   * feature on its EClass (matching the {@code Correspondences} container class).
+   *
+   * @return flat list of all Correspondence EObjects across all loaded resources
+   */
+  private List<EObject> getCorrespondenceObjects() {
+    List<EObject> result = new ArrayList<>();
+    for (Resource resource : resourceSet.getResources()) {
+      for (EObject root : resource.getContents()) {
+        EStructuralFeature corrFeature = root.eClass().getEStructuralFeature("correspondences");
+        if (corrFeature != null) {
+          List<EObject> corrs = safeGetList(root, "correspondences");
+          if (corrs != null) result.addAll(corrs);
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Resolves all proxy EObjects in the list using the resource set.
+   *
+   * <p>EMF may leave cross-resource references as unresolved proxies when {@code
+   * resolveProxies="false"} is set on the reference in the metamodel. This method forces resolution
+   * via {@link EcoreUtil#resolve(EObject, ResourceSet)}. Unresolvable proxies are dropped.
+   *
+   * @param proxies list of potentially proxy EObjects, or null
+   * @return new list with all proxies resolved; null if input is null
+   */
+  private List<EObject> resolveAll(List<EObject> proxies) {
+    if (proxies == null) return null;
+    List<EObject> resolved = new ArrayList<>(proxies.size());
+    for (EObject obj : proxies) {
+      EObject r = EcoreUtil.resolve(obj, resourceSet);
+      if (r != null && !r.eIsProxy()) {
+        resolved.add(r);
+      }
+    }
+    return resolved;
+  }
+
+  /**
+   * Safely retrieves a structural feature value from an EObject by feature name.
+   *
+   * @param obj the EObject to read from
+   * @param featureName the name of the structural feature
+   * @return the feature value, or null if the feature does not exist on this EObject
+   */
+  private Object safeGet(EObject obj, String featureName) {
+    EStructuralFeature feature = obj.eClass().getEStructuralFeature(featureName);
+    if (feature == null) return null;
+    return obj.eGet(feature);
+  }
+
+  /**
+   * Safely retrieves a many-valued structural feature as a typed list.
+   *
+   * @param obj the EObject to read from
+   * @param featureName the name of the structural feature
+   * @return the feature value cast to {@code List<EObject>}, or null if the feature does not exist
+   */
+  @SuppressWarnings("unchecked")
+  private List<EObject> safeGetList(EObject obj, String featureName) {
+    Object value = safeGet(obj, featureName);
+    if (value == null) return null;
+    return (List<EObject>) value;
   }
 }
