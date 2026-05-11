@@ -28,7 +28,7 @@ import tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor;
  * Phase 1 visitor that constructs the symbol table by collecting variable declarations and building
  * scope hierarchies.
  *
- * <p>This is the first pass in the VitruvOCL compiler's 3-pass architecture, executed before type
+ * <p>This is the first pass in the OCL compiler's 3-pass architecture, executed before type
  * checking (Pass 2) and evaluation (Pass 3). It walks the ANTLR parse tree to populate the symbol
  * table with all variable bindings and their declared types.
  *
@@ -250,12 +250,41 @@ public class SymbolTableBuilder extends AbstractPhaseVisitor<Void> {
     }
 
     if (contextType == null) {
-      errors.add(
-          ctx.getStart().getLine(),
-          ctx.getStart().getCharPositionInLine(),
-          "Unknown context type",
-          ErrorSeverity.ERROR,
-          "symbol-table-builder");
+      if (ctx.metamodel != null && ctx.className != null) {
+        // Qualified name: decide whether the package or the class is the culprit.
+        String mmName = ctx.metamodel.getText();
+        String clsName = ctx.className.getText();
+        if (!specification.getAvailableMetamodels().contains(mmName)) {
+          // Underline exactly the misspelled metamodel token.
+          errors.add(
+              ctx.metamodel,
+              "Unknown metamodel '" + mmName + "'",
+              ErrorSeverity.ERROR,
+              "symbol-table-builder");
+        } else {
+          // Metamodel exists — the class name is wrong. Underline that token.
+          errors.add(
+              ctx.className,
+              "Unknown class '" + clsName + "' in metamodel '" + mmName + "'",
+              ErrorSeverity.ERROR,
+              "symbol-table-builder");
+        }
+      } else if (ctx.contextName != null) {
+        // Unqualified name: underline the identifier token directly.
+        errors.add(
+            ctx.contextName,
+            "Unknown context type '" + ctx.contextName.getText() + "'",
+            ErrorSeverity.ERROR,
+            "symbol-table-builder");
+      } else {
+        // Fallback — malformed rule, context keyword is the best we can do.
+        errors.add(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            "Unknown context type",
+            ErrorSeverity.ERROR,
+            "symbol-table-builder");
+      }
       return null;
     }
 
@@ -381,6 +410,21 @@ public class SymbolTableBuilder extends AbstractPhaseVisitor<Void> {
     for (OCLParser.VariableDeclarationContext varDecl : ctx.variableDeclaration()) {
       visit(varDecl);
     }
+    return null;
+  }
+
+  /**
+   * Type-checks the {@code length()} operation.
+   *
+   * <p>No additional type-checking is required beyond what the receiver resolution already
+   * enforces; the result type is unconditionally registered as {@code INTEGER} singleton by the
+   * surrounding infrastructure.
+   *
+   * @param ctx the parse tree node for the {@code length()} operation
+   * @return {@code null} (visitor return convention)
+   */
+  @Override
+  public Void visitLengthOp(OCLParser.LengthOpContext ctx) {
     return null;
   }
 
@@ -531,7 +575,7 @@ public class SymbolTableBuilder extends AbstractPhaseVisitor<Void> {
   /**
    * Resolves a primitive type literal.
    *
-   * <p>Maps OCL primitive type names to VitruvOCL Type constants:
+   * <p>Maps OCL primitive type names to OCL Type constants:
    *
    * <ul>
    *   <li>Boolean → Type.BOOLEAN
@@ -649,6 +693,120 @@ public class SymbolTableBuilder extends AbstractPhaseVisitor<Void> {
   @Override
   public Void visitExistsOp(OCLParser.ExistsOpContext ctx) {
     return visitIteratorOp(ctx, ctx.iteratorVars, ctx.body);
+  }
+
+  /**
+   * Type-checks the {@code one()} iterator operation.
+   *
+   * <p>Delegates to {@link #visitIteratorOp} with the iterator variable list and body expression.
+   * The result type is unconditionally {@code BOOLEAN} singleton, registered by {@code
+   * visitIteratorOp} based on the operation kind.
+   *
+   * @param ctx the parse tree node for the {@code one()} operation, including the iterator variable
+   *     list and body expression
+   * @return {@code null} (visitor return convention)
+   */
+  @Override
+  public Void visitOneOp(OCLParser.OneOpContext ctx) {
+    return visitIteratorOp(ctx, ctx.iteratorVars, ctx.body);
+  }
+
+  /**
+   * Type-checks the {@code any()} iterator operation.
+   *
+   * <p>Delegates to {@link #visitIteratorOp} with the iterator variable list and body expression.
+   * The result type is an {@code Optional} of the receiver's element type, registered by {@code
+   * visitIteratorOp} based on the operation kind.
+   *
+   * @param ctx the parse tree node for the {@code any()} operation, including the iterator variable
+   *     list and body expression
+   * @return {@code null} (visitor return convention)
+   */
+  @Override
+  public Void visitAnyOp(OCLParser.AnyOpContext ctx) {
+    return visitIteratorOp(ctx, ctx.iteratorVars, ctx.body);
+  }
+
+  /**
+   * Type-checks the {@code isUnique()} iterator operation.
+   *
+   * <p>Delegates to {@link #visitIteratorOp} with the iterator variable list and body expression.
+   * The result type is unconditionally {@code BOOLEAN} singleton, registered by {@code
+   * visitIteratorOp} based on the operation kind.
+   *
+   * @param ctx the parse tree node for the {@code isUnique()} operation, including the iterator
+   *     variable list and body expression
+   * @return {@code null} (visitor return convention)
+   */
+  @Override
+  public Void visitIsUniqueOp(OCLParser.IsUniqueOpContext ctx) {
+    return visitIteratorOp(ctx, ctx.iteratorVars, ctx.body);
+  }
+
+  /**
+   * Type-checks the {@code sortedBy()} iterator operation.
+   *
+   * <p>Delegates to {@link #visitIteratorOp} with the iterator variable list and body expression.
+   * The result type is an {@code OrderedSet} of the receiver's element type, registered by {@code
+   * visitIteratorOp} based on the operation kind.
+   *
+   * @param ctx the parse tree node for the {@code sortedBy()} operation, including the iterator
+   *     variable list and body expression
+   * @return {@code null} (visitor return convention)
+   */
+  @Override
+  public Void visitSortedByOp(OCLParser.SortedByOpContext ctx) {
+    return visitIteratorOp(ctx, ctx.iteratorVars, ctx.body);
+  }
+
+  /**
+   * Type-checks the {@code collectNested()} iterator operation.
+   *
+   * <p>Delegates to {@link #visitIteratorOp} with the iterator variable list and body expression.
+   * The result type is a {@code Bag} of the receiver's element type, registered by {@code
+   * visitIteratorOp} based on the operation kind.
+   *
+   * @param ctx the parse tree node for the {@code collectNested()} operation, including the
+   *     iterator variable list and body expression
+   * @return {@code null} (visitor return convention)
+   */
+  @Override
+  public Void visitCollectNestedOp(OCLParser.CollectNestedOpContext ctx) {
+    return visitIteratorOp(ctx, ctx.iteratorVars, ctx.body);
+  }
+
+  /**
+   * Type-checks the {@code iterate()} operation.
+   *
+   * <p>Opens a fresh {@link LocalScope}, annotates the node with it, and registers both the
+   * iterator variable and the accumulator variable (each typed as {@code ANY} as placeholders)
+   * before visiting the accumulator initializer and the body expression. The scope is exited in a
+   * {@code finally} block to ensure cleanup on error.
+   *
+   * @param ctx the parse tree node for the {@code iterate()} operation, including the {@link
+   *     OCLParser.IterateVarSpecContext} with iterator variable, accumulator variable, initializer
+   *     expression, and body
+   * @return {@code null} (visitor return convention)
+   */
+  @Override
+  public Void visitIterateOp(OCLParser.IterateOpContext ctx) {
+    OCLParser.IterateVarSpecContext varSpec = ctx.iterateVarSpec();
+
+    LocalScope iterScope = new LocalScope(symbolTable.getCurrentScope());
+    symbolTable.enterScope(iterScope);
+    scopeAnnotator.annotate(ctx, iterScope);
+
+    try {
+      symbolTable.defineVariable(
+          new VariableSymbol(varSpec.iterVar.getText(), Type.ANY, iterScope, true));
+      symbolTable.defineVariable(
+          new VariableSymbol(varSpec.accVar.getText(), Type.ANY, iterScope, false));
+      visit(varSpec.accInit);
+      visit(ctx.body);
+      return null;
+    } finally {
+      symbolTable.exitScope();
+    }
   }
 
   /**
@@ -987,21 +1145,6 @@ public class SymbolTableBuilder extends AbstractPhaseVisitor<Void> {
   @Override
   public Void visitLogicalNot(OCLParser.LogicalNotContext ctx) {
     return visit(ctx.operand);
-  }
-
-  /**
-   * Visits a correspondence operation (~ operator for cross-metamodel constraints).
-   *
-   * <p>Example: {@code spacecraft ~ satellite}
-   *
-   * @param ctx The correspondence parse tree node
-   * @return null (void visitor)
-   */
-  @Override
-  public Void visitCorrespondence(OCLParser.CorrespondenceContext ctx) {
-    visit(ctx.left);
-    visit(ctx.right);
-    return null;
   }
 
   /**

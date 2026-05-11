@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>tools.vitruv.multimodelocl</groupId>
+        <artifactId>multimodelocl</artifactId>
+        <version>1.0.2-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>multimodelocl-language-server</artifactId>
+    <packaging>jar</packaging>
+
+    <name>MultiModelOCL Language Server</name>
+    <description>LSP-based language server providing live diagnostics, completion and hover for MultiModel-OCL</description>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <!-- Core language module: brings ANTLR runtime, EMF, and all pipeline classes. -->
+        <dependency>
+            <groupId>tools.vitruv.multimodelocl</groupId>
+            <artifactId>multimodelocl-language</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- LSP4J – JSON-RPC + Language Server Protocol types and launcher. -->
+        <dependency>
+            <groupId>org.eclipse.lsp4j</groupId>
+            <artifactId>org.eclipse.lsp4j</artifactId>
+            <version>0.21.2</version>
+        </dependency>
+
+        <!-- ANTLR runtime – needed for parse-tree types used by SymbolProvider / NodeFinder.
+             Declared explicitly because the language module is shaded and its transitive
+             dependencies are not visible to Maven's dependency resolver. -->
+        <dependency>
+            <groupId>org.antlr</groupId>
+            <artifactId>antlr4-runtime</artifactId>
+        </dependency>
+
+        <!-- EMF – needed for EClass, EPackage, EStructuralFeature, etc. used by
+             CompletionProvider, HoverProvider, DefinitionProvider.
+             Declared explicitly for the same shading reason as ANTLR above. -->
+        <dependency>
+            <groupId>org.eclipse.emf</groupId>
+            <artifactId>org.eclipse.emf.common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.emf</groupId>
+            <artifactId>org.eclipse.emf.ecore</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.emf</groupId>
+            <artifactId>org.eclipse.emf.ecore.xmi</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+
+            <!-- Shade Plugin: bundle everything into a self-contained fat JAR. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.6.2</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <transformers>
+                                <transformer
+                                    implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>tools.vitruv.multimodelocl.lsp.LspMain</mainClass>
+                                </transformer>
+                                <!-- Merges META-INF/services files from all JARs (needed by EMF + LSP4J). -->
+                                <transformer
+                                    implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
+                            <finalName>language-server</finalName>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

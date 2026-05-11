@@ -60,11 +60,25 @@ public class SymbolTableImpl implements SymbolTable {
     this.wrapper = wrapper;
   }
 
+  /**
+   * Pushes the given scope onto the scope stack, making it the current active scope.
+   *
+   * <p>All subsequent symbol lookups and definitions operate within {@code newScope} until {@link
+   * #exitScope()} is called.
+   *
+   * @param newScope the scope to enter; must not be {@code null}
+   */
   @Override
   public void enterScope(Scope newScope) {
     currentScope = newScope;
   }
 
+  /**
+   * Pops the current scope, restoring the enclosing scope as the active scope.
+   *
+   * <p>If the current scope has no enclosing scope (i.e. it is the global root scope), the call is
+   * a no-op and the current scope remains unchanged.
+   */
   @Override
   public void exitScope() {
     if (currentScope.getEnclosingScope() != null) {
@@ -72,43 +86,114 @@ public class SymbolTableImpl implements SymbolTable {
     }
   }
 
+  /**
+   * Defines a variable symbol in the current active scope.
+   *
+   * <p>Delegates to {@link Scope#defineVariable} on the current scope. If a symbol with the same
+   * name already exists in the current scope, the behaviour is determined by the scope
+   * implementation.
+   *
+   * @param symbol the variable symbol to define; must not be {@code null}
+   */
   @Override
   public void defineVariable(VariableSymbol symbol) {
     currentScope.defineVariable(symbol);
   }
 
+  /**
+   * Defines a type symbol in the global scope.
+   *
+   * <p>Type definitions are always registered at the global scope level, regardless of the current
+   * active scope, ensuring that type names are universally visible throughout the entire constraint
+   * expression.
+   *
+   * @param symbol the type symbol to define; must not be {@code null}
+   */
   @Override
   public void defineType(TypeSymbol symbol) {
     // Types are only defined in the global scope
     globalScope.defineType(symbol);
   }
 
+  /**
+   * Defines an operation symbol in the global scope.
+   *
+   * <p>Operation definitions are always registered at the global scope level, regardless of the
+   * current active scope, ensuring that operation names are universally visible throughout the
+   * entire constraint expression.
+   *
+   * @param symbol the operation symbol to define; must not be {@code null}
+   */
   @Override
   public void defineOperation(OperationSymbol symbol) {
     // Operations are only defined in the global scope
     globalScope.defineOperation(symbol);
   }
 
+  /**
+   * Resolves a variable symbol by name, searching from the current active scope outward.
+   *
+   * <p>Delegates to {@link Scope#resolveVariable} on the current scope, which walks the enclosing
+   * scope chain until the variable is found or the global scope is exhausted.
+   *
+   * @param name the name of the variable to resolve
+   * @return the matching {@link VariableSymbol}, or {@code null} if not found
+   */
   @Override
   public VariableSymbol resolveVariable(String name) {
     return currentScope.resolveVariable(name);
   }
 
+  /**
+   * Resolves a type symbol by name, searching from the current active scope outward.
+   *
+   * <p>Delegates to {@link Scope#resolveType} on the current scope, which walks the enclosing scope
+   * chain until the type is found or the global scope is exhausted.
+   *
+   * @param name the name of the type to resolve
+   * @return the matching {@link TypeSymbol}, or {@code null} if not found
+   */
   @Override
   public TypeSymbol resolveType(String name) {
     return currentScope.resolveType(name);
   }
 
+  /**
+   * Resolves an operation symbol by name, searching from the current active scope outward.
+   *
+   * <p>Delegates to {@link Scope#resolveOperation} on the current scope, which walks the enclosing
+   * scope chain until the operation is found or the global scope is exhausted.
+   *
+   * @param name the name of the operation to resolve
+   * @return the matching {@link OperationSymbol}, or {@code null} if not found
+   */
   @Override
   public OperationSymbol resolveOperation(String name) {
     return currentScope.resolveOperation(name);
   }
 
+  /**
+   * Returns the current active scope.
+   *
+   * <p>The current scope is updated by calls to {@link #enterScope} and {@link #exitScope}, and
+   * reflects the innermost scope at any point during constraint compilation or evaluation.
+   *
+   * @return the current active {@link Scope}; never {@code null}
+   */
   @Override
   public Scope getCurrentScope() {
     return currentScope;
   }
 
+  /**
+   * Returns the global scope.
+   *
+   * <p>The global scope is the outermost scope in the scope chain and serves as the root for all
+   * type, operation, and variable lookups. It is created once at construction time and remains
+   * constant throughout the lifetime of the symbol table.
+   *
+   * @return the global {@link Scope}; never {@code null}
+   */
   @Override
   public Scope getGlobalScope() {
     return globalScope;

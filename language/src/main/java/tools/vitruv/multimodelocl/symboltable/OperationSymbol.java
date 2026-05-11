@@ -16,7 +16,7 @@ import java.util.List;
 import tools.vitruv.multimodelocl.typechecker.Type;
 
 /**
- * Symbol representing an operation in the VitruvOCL symbol table.
+ * Symbol representing an operation in the OCL symbol table.
  *
  * <p>Operations include:
  *

@@ -31,8 +31,8 @@ import tools.vitruv.multimodelocl.symboltable.SymbolTable;
  * </ul>
  *
  * <p>The generic type parameter {@code T} allows phase-specific return types:
- * tools.vitruv.dsls.vitruvOCL.common.Type for type checking and
- * tools.vitruv.dsls.vitruvOCL.evaluator.Value for evaluation.
+ * tools.vitruv.multimodelocl.common.Type for type checking and
+ * tools.vitruv.multimodelocl.evaluator.Value for evaluation.
  *
  * <p>Subclasses must implement {@link #handleUndefinedSymbol(String, ParserRuleContext)} to provide
  * phase-appropriate error handling for unresolved variables.
