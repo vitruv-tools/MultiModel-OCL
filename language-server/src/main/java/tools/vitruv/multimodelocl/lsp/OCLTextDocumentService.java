@@ -1,10 +1,8 @@
-/*******************************************************************************
- * Copyright (c) 2026 Max Oesterle
- *
+/*******************************************************************************.
+ * Copyright (c) 2026 Max Oesterle.
  * This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License 2.0 which is available at
  * https://www.eclipse.org/legal/epl-2.0/
- *
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
 package tools.vitruv.multimodelocl.lsp;
@@ -21,10 +19,6 @@ import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
-import org.eclipse.lsp4j.InlayHint;
-import org.eclipse.lsp4j.InlayHintParams;
-import org.eclipse.lsp4j.SignatureHelp;
-import org.eclipse.lsp4j.SignatureHelpParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -33,9 +27,13 @@ import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
+import org.eclipse.lsp4j.InlayHint;
+import org.eclipse.lsp4j.InlayHintParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.SignatureHelp;
+import org.eclipse.lsp4j.SignatureHelpParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
@@ -72,12 +70,17 @@ public class OCLTextDocumentService implements TextDocumentService {
   private final Map<String, ScheduledFuture<?>> pending = new ConcurrentHashMap<>();
 
   private final ScheduledExecutorService debouncer =
-      Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "ocl-ls-debouncer");
-        t.setDaemon(true);
-        return t;
-      });
+      Executors.newSingleThreadScheduledExecutor(
+          r -> {
+            Thread t = new Thread(r, "ocl-ls-debouncer");
+            t.setDaemon(true);
+            return t;
+          });
 
+  /**
+   * Initializes the text document service with the given {@link DocumentAnalyzer} and {@link
+   * MetamodelWrapper}.
+   */
   public OCLTextDocumentService(DocumentAnalyzer analyzer, MetamodelWrapper wrapper) {
     this.analyzer = analyzer;
     this.completionProvider = new CompletionProvider(wrapper);
@@ -88,6 +91,10 @@ public class OCLTextDocumentService implements TextDocumentService {
     this.inlayHintProvider = new InlayHintProvider();
   }
 
+  /**
+   * Sets the {@link LanguageClient} for this service, allowing it to send diagnostics and other
+   * messages.
+   */
   public void setClient(LanguageClient client) {
     this.client = client;
   }
@@ -219,6 +226,12 @@ public class OCLTextDocumentService implements TextDocumentService {
   // Debounced analysis
   // ---------------------------------------------------------------------------
 
+  /**
+   * Schedules an analysis for the given document URI and text.
+   *
+   * @param uri the URI of the document to analyze
+   * @param text the text of the document to analyze
+   */
   private void scheduleAnalysis(String uri, String text) {
     ScheduledFuture<?> existing = pending.get(uri);
     if (existing != null) {
@@ -226,8 +239,7 @@ public class OCLTextDocumentService implements TextDocumentService {
     }
 
     ScheduledFuture<?> future =
-        debouncer.schedule(
-            () -> runAnalysis(uri, text), DEBOUNCE_MS, TimeUnit.MILLISECONDS);
+        debouncer.schedule(() -> runAnalysis(uri, text), DEBOUNCE_MS, TimeUnit.MILLISECONDS);
     pending.put(uri, future);
   }
 
@@ -237,8 +249,7 @@ public class OCLTextDocumentService implements TextDocumentService {
       analyses.put(uri, analysis);
 
       if (client != null) {
-        client.publishDiagnostics(
-            new PublishDiagnosticsParams(uri, analysis.getDiagnostics()));
+        client.publishDiagnostics(new PublishDiagnosticsParams(uri, analysis.getDiagnostics()));
       }
     } catch (Exception e) {
       System.err.println("[OCL-LS] Analysis failed for " + uri + ": " + e.getMessage());
@@ -248,13 +259,17 @@ public class OCLTextDocumentService implements TextDocumentService {
   /**
    * Re-schedules analysis for every currently-open document.
    *
-   * <p>Called after a metamodel hot-reload so that all open {@code .ocl} files pick up the
-   * new type information without the user having to make a dummy edit.
+   * <p>Called after a metamodel hot-reload so that all open {@code .ocl} files pick up the new type
+   * information without the user having to make a dummy edit.
    */
   public void reanalyzeAll() {
     documents.forEach(this::scheduleAnalysis);
   }
 
+  /**
+   * Shuts down the debouncer executor service. Should be called when the language server is stopped
+   * to ensure a clean shutdown.
+   */
   public void shutdown() {
     debouncer.shutdownNow();
   }

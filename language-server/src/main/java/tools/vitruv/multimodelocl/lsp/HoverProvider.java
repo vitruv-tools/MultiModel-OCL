@@ -1,10 +1,8 @@
-/*******************************************************************************
- * Copyright (c) 2026 Max Oesterle
- *
+/*******************************************************************************.
+ * Copyright (c) 2026 Max Oesterle.
  * This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License 2.0 which is available at
  * https://www.eclipse.org/legal/epl-2.0/
- *
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
 package tools.vitruv.multimodelocl.lsp;
@@ -53,6 +51,9 @@ public class HoverProvider {
   /** Maximum number of inherited features shown before a "+N more" line is added. */
   private static final int MAX_INHERITED_SHOWN = 8;
 
+  /**
+   * Returns a Hover for the token at {@code cursor}, or {@code null} if no hover info is available.
+   */
   public Hover getHover(Position cursor, DocumentAnalysis analysis) {
     if (analysis == null || analysis.getTree() == null) return null;
 
@@ -79,7 +80,9 @@ public class HoverProvider {
     if (node instanceof TerminalNode terminal) {
       String tokenText = terminal.getSymbol().getText();
       Optional<OperationDoc> doc = OclOperationDocs.lookup(tokenText);
-      if (doc.isPresent()) return buildOperationHover(doc.get());
+      if (doc.isPresent()) {
+        return buildOperationHover(doc.get());
+      }
     }
 
     // ------------------------------------------------------------------
