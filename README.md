@@ -1,4 +1,7 @@
 # MultiModelOCL
+[![GitHub Action CI](https://github.com/vitruv-tools/MultiModel-OCL/actions/workflows/ci.yml/badge.svg)](https://github.com/vitruv-tools/MultiModel-OCLactions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/release/vitruv-tools/MultiModel-OCL.svg)](https://github.com/vitruv-tools/MultiModel-OCL/releases/latest)
+[![Issues](https://img.shields.io/github/issues/vitruv-tools/MultiModel-OCL.svg)](https://github.com/vitruv-tools/MultiModel-OCL/issues)
 
 A domain-specific language for evaluating OCL constraints across multiple EMF metamodels with cross-model consistency checking.
 
