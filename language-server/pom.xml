@@ -34,7 +34,7 @@
         <dependency>
             <groupId>org.eclipse.lsp4j</groupId>
             <artifactId>org.eclipse.lsp4j</artifactId>
-            <version>0.21.2</version>
+            <version>1.0.0</version>
         </dependency>
 
         <!-- ANTLR runtime – needed for parse-tree types used by SymbolProvider / NodeFinder.
