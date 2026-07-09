@@ -16,7 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Global scope implementation for the VitruvOCL symbol table.
+ * Global scope implementation for the OCL symbol table.
  *
  * <p>The global scope serves as the root of the symbol table hierarchy and contains:
  *
@@ -70,7 +70,7 @@ public class GlobalScope implements Scope {
   /**
    * Defines a type in the global scope.
    *
-   * <p>Used during symbol table initialization to register built-in VitruvOCL types.
+   * <p>Used during symbol table initialization to register built-in OCL types.
    *
    * @param symbol the type symbol to define
    */

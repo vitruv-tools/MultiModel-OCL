@@ -1,15 +1,25 @@
-# VitruvOCL Architecture
+# OCL Architecture
 
 ## Overview
 3-pass compiler: Parse → Type Check → Evaluate
 
 ## Directory Structure
-- `grammar/` - ANTLR4 grammar (VitruvOCL.g4)
-- `symboltable/` - Symbol table, scopes, variable bindings
-- `typechecker/` - Pass 2: Type checking visitor
-- `evaluator/` - Pass 3: Runtime evaluation, Value system
-- `pipeline/` - Public API, metamodel loading, compilation orchestration
-- `common/` - Shared types, error handling, visitor base classes
+
+**`language/src/main/antlr4/`**
+- `OCL.g4` - ANTLR4 grammar: lexer rules, expression hierarchy, collection/string/type operations
+
+**`language/src/main/java/.../multimodelocl/`** (Java packages)
+- `cli/` - Command-line interface entry point (`Main`, argument parsing)
+- `common/` - Shared types, error handling (`ErrorCollector`, `CompileError`), visitor base
+- `symboltable/` - Symbol table, scope hierarchy, variable bindings
+- `typechecker/` - Pass 2: Type checking visitor, `Type` system
+- `evaluator/` - Pass 3: Runtime evaluation, `Value` system, `OCLElement`
+- `pipeline/` - Public API (`MultiModelOCLInterface`), metamodel loading (`MetamodelWrapper`)
+
+**`language-server/src/main/java/.../lsp/`**
+- LSP4J language server: `LspMain`, `OclLanguageServer`, `DocumentAnalyzer`
+- Diagnostic pipeline (syntax errors + type-checker errors → LSP diagnostics)
+- `LspErrorListener`, `OclErrorStrategy`, `HoverProvider`, `CompletionProvider`
 
 ## Compilation Pipeline
 
@@ -38,8 +48,9 @@
 **Smart Loading**: Only loads metamodels referenced in constraints
 
 ## External Integration
-- **ANTLR4**: Parser generation
-- **EMF**: Metamodel and instance handling (EPackage, EObject)
+- **ANTLR4**: Parser generation (grammar → lexer/parser Java classes)
+- **EMF**: Metamodel and instance handling (`EPackage`, `EObject`, Ecore)
+- **LSP4J**: Language Server Protocol implementation (diagnostics, hover, completion)
 - **Vitruvius**: VSUM integration (planned)
 
 ## Test Structure

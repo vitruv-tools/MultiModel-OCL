@@ -16,7 +16,7 @@ import java.util.*;
 import tools.vitruv.multimodelocl.common.CompileError;
 
 /**
- * Result of evaluating a single VitruvOCL constraint.
+ * Result of evaluating a single OCL constraint.
  *
  * <p>Captures the complete evaluation outcome including:
  *

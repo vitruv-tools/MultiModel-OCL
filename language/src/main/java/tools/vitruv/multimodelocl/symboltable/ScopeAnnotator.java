@@ -55,7 +55,7 @@ import org.antlr.v4.runtime.tree.ParseTreeProperty;
  * }</pre>
  *
  * see ParseTreeProperty ANTLR4's node annotation utility; see SymbolTableBuilder Pass 1 that
- * populates annotations; see tools.vitruv.dsls.vitruvOCL.typechecker.TypeCheckVisitor Pass 2 that
+ * populates annotations; see tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor Pass 2 that
  * reads annotations
  */
 public class ScopeAnnotator {

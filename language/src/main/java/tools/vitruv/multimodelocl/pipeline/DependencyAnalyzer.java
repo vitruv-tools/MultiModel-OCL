@@ -17,7 +17,7 @@ import org.antlr.v4.runtime.*;
 import tools.vitruv.multimodelocl.*;
 
 /**
- * Analyzes VitruvOCL constraints to extract metamodel dependencies.
+ * Analyzes OCL constraints to extract metamodel dependencies.
  *
  * <p>Identifies required EPackages by detecting fully qualified names using the {@code ::}
  * namespace separator (e.g., {@code spacecraft::Spacecraft}). Used during constraint validation to

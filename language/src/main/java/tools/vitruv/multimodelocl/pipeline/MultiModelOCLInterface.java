@@ -26,11 +26,11 @@ import tools.vitruv.multimodelocl.evaluator.EvaluationVisitor;
 import tools.vitruv.multimodelocl.evaluator.Value;
 
 /**
- * Main API for VitruvOCL constraint evaluation.
+ * Main API for OCL constraint evaluation.
  *
- * <p>VitruvOCL implements semantics with unified dot-notation (no arrow operator), 1-based
- * indexing, and "everything is a collection" philosophy where single values become singletons and
- * null becomes empty collections.
+ * <p>OCL implements semantics with unified dot-notation (no arrow operator), 1-based indexing, and
+ * "everything is a collection" philosophy where single values become singletons and null becomes
+ * empty collections.
  *
  * <p>Provides high-level methods for evaluating OCL constraints against Ecore models:
  *
@@ -45,7 +45,7 @@ import tools.vitruv.multimodelocl.evaluator.Value;
  *
  * <h2>Constraint Syntax</h2>
  *
- * VitruvOCL constraints must begin with {@code context} keyword:
+ * OCL constraints must begin with {@code context} keyword:
  *
  * <pre>
  * context MetamodelName::ClassName inv constraintName:

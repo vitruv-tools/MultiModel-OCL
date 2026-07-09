@@ -16,7 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Local scope implementation for nested variable declarations in VitruvOCL.
+ * Local scope implementation for nested variable declarations in OCL.
  *
  * <p>Local scopes are created for nested contexts during constraint evaluation, including:
  *

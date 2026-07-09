@@ -23,8 +23,7 @@ import tools.vitruv.multimodelocl.pipeline.ConstraintResult;
 import tools.vitruv.multimodelocl.pipeline.MultiModelOCLInterface;
 
 /**
- * Command-line interface for VitruvOCL compiler. Outputs JSON for easy integration with IDEs and
- * tools.
+ * Command-line interface for OCL compiler. Outputs JSON for easy integration with IDEs and tools.
  */
 public class MultiModelOCLCLI {
 
@@ -295,19 +294,19 @@ public class MultiModelOCLCLI {
   private static void printUsage() {
     System.out.println(
         """
-        VitruvOCL Command Line Interface
+        OCL Command Line Interface
 
         Usage:
-          vitruvocl check <constraint-file> --ecore <files>
+          OCL check <constraint-file> --ecore <files>
               Type-check constraint syntax and semantics
 
-          vitruvocl eval <constraint-file> --ecore <files> --xmi <files>
+          OCL eval <constraint-file> --ecore <files> --xmi <files>
               Evaluate single constraint against model instances
 
-          vitruvocl eval-batch <constraints-file> --ecore <files> --xmi <files>
+          OCL eval-batch <constraints-file> --ecore <files> --xmi <files>
               Evaluate all constraints and return individual results
 
-          vitruvocl version
+          OCL version
               Print version information
 
         Arguments:
@@ -317,14 +316,14 @@ public class MultiModelOCLCLI {
           --xmi <files>         Comma-separated model instance files
 
         Examples:
-          vitruvocl check constraints.ocl --ecore spacemission.ecore
-          vitruvocl eval constraints.ocl --ecore model.ecore --xmi instance.xmi
-          vitruvocl eval-batch constraints.ocl --ecore model.ecore --xmi instance.xmi
+          OCL check constraints.ocl --ecore spacemission.ecore
+          OCL eval constraints.ocl --ecore model.ecore --xmi instance.xmi
+          OCL eval-batch constraints.ocl --ecore model.ecore --xmi instance.xmi
         """);
   }
 
   private static void printVersion() {
-    System.out.println("VitruvOCL 1.0.0");
+    System.out.println("OCL 1.0.0");
   }
 
   record CLIArgs(Path constraintFile, Path[] ecoreFiles, Path[] xmiFiles) {}
