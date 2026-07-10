@@ -3,15 +3,14 @@ context spaceMission::Spacecraft inv serialNumberMatch:
     sat.serialNumber == self.serialNumber
   )
 
-
 context spaceMission::Spacecraft inv massConsistency:
   satelliteSystem::Satellite.allInstances().forAll(sat |
     sat.massKg == self.mass implies sat.active == self.operational
-  )
-
+  ) 
 
 context spaceMission::Spacecraft inv minSatelliteCount:
   satelliteSystem::Satellite.allInstances().size() >= 2
+
 
 
 context spaceMission::Spacecraft inv totalMass:
@@ -60,7 +59,7 @@ context spaceMission::Spacecraft inv conditional:
   endif
 
 context spaceMission::Spacecraft inv satellitesNotEmpty:
-  satelliteSystem::Satellite.allInstances().notEmpty()
+  satelliteSystem::Satellite.allInstances().isEmpty()
 
 context spaceMission::Spacecraft inv nonExistentEmpty:
   satelliteSystem::Satellite.allInstances().select(sat |
@@ -72,3 +71,4 @@ context satelliteSystem::Satellite inv selectWithTwoVariables:
     satelliteSystem::Satellite.allInstances().select(s1, s2 |
       s1.serialNumber != s2.serialNumber
   ).size() > 0
+

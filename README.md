@@ -224,16 +224,17 @@ collection.lift()                    -- Lift operation
 
 #### Arithmetic Operations
 ```ocl
-x + y      -- Addition
-x - y      -- Subtraction
-x * y      -- Multiplication
-x / y      -- Division (real division)
-x % y      -- Modulo
--x         -- Unary minus
-x.abs()    -- Absolute value
-x.floor()  -- Round down
-x.ceil()   -- Round up
-x.round()  -- Round to nearest
+x + y        -- Addition
+x - y        -- Subtraction
+x * y        -- Multiplication
+x / y        -- Division (real division)
+-x           -- Unary minus
+x.abs()      -- Absolute value
+x.floor()    -- Round down
+x.ceil()     -- Round up
+x.round()    -- Round to nearest
+x.div(y)     -- Integer division
+x.mod(y)     -- Modulo (remainder)
 ```
 
 #### Comparison Operations
@@ -375,14 +376,14 @@ open language/target/site/jacoco/index.html
 
 ### Build VSCode Extension
 ```bash
-cd vscode-extension
-
-# First build the compiler JAR (it gets bundled)
-cd ..
+# First build all modules — this produces the language server fat JAR
 mvn clean package
-cp language/target/multimodelocl.jar vscode-extension/lib/
 
-# Then build extension
+# Copy the shaded language server JAR into the extension's lib folder
+cp language-server/target/multimodelocl-language-server-*-shaded.jar \
+   vscode-extension/lib/multimodelocl.jar
+
+# Then package the extension
 cd vscode-extension
 npm install
 npm run compile
@@ -392,15 +393,18 @@ npm run package
 ### Project Structure
 ```
 MultiModel-OCL/
-├── language/                   # Compiler implementation
+├── language/                   # Compiler, type checker, evaluator
 │   ├── src/main/
-│   │   ├── antlr4/            # Grammar definition
-│   │   └── java/              # Compiler passes, evaluator
+│   │   ├── antlr4/            # ANTLR4 grammar (OCL.g4)
+│   │   └── java/              # Compiler passes: symboltable, typechecker, evaluator, pipeline, cli
+│   └── pom.xml
+├── language-server/            # LSP language server (diagnostics, hover, completion)
+│   ├── src/main/java/         # LSP handlers, DocumentAnalyzer, LspMain
 │   └── pom.xml
 ├── vscode-extension/           # VSCode extension
-│   ├── src/extension.ts       # Extension logic
-│   ├── syntaxes/              # Syntax highlighting
-│   ├── lib/                   # Bundled JAR
+│   ├── src/extension.ts       # Extension entry point
+│   ├── syntaxes/              # Syntax highlighting grammar
+│   ├── lib/                   # Bundled language server JAR (tracked in git)
 │   └── package.json
 ├── examples/                   # Example projects
 └── pom.xml                    # Parent POM

@@ -13,10 +13,10 @@
 
 import java.nio.file.Path;
 import java.util.List;
-import tools.vitruv.dsls.vitruvOCL.pipeline.*;
+import tools.vitruv.multimodelocl.pipeline.*;
 
 /**
- * Demonstration of VitruvOCL API usage patterns.
+ * Demonstration of OCL API usage patterns.
  *
  * <p>This class showcases all available methods for evaluating OCL constraints against Ecore
  * models. It demonstrates:
@@ -52,14 +52,14 @@ import tools.vitruv.dsls.vitruvOCL.pipeline.*;
  *       extensions
  * </ul>
  *
- * @see VitruvOCL for main API documentation
+ * @see OCL for main API documentation
  * @see BatchValidationResult for batch result handling
  * @see ConstraintResult for single constraint results
  */
 public class Main {
 
   /**
-   * Main entry point demonstrating all VitruvOCL API methods.
+   * Main entry point demonstrating all OCL API methods.
    *
    * <p>Executes examples in sequence, showing progressively more detailed usage patterns from
    * simple project-based evaluation to explicit file handling and programmatic constraint
@@ -69,7 +69,7 @@ public class Main {
    * @throws Exception If file I/O fails or constraints cannot be parsed
    */
   public static void main(String[] args) throws Exception {
-    printHeader("VitruvOCL API Demonstration");
+    printHeader("OCL API Demonstration");
 
     // Execute examples in logical progression
     demoProjectEvaluation();
@@ -87,8 +87,7 @@ public class Main {
    * Demonstrates convention-over-configuration project evaluation.
    *
    * <p>This is the simplest usage pattern - just point to a project directory following the
-   * standard structure and VitruvOCL automatically discovers all metamodels, instances, and
-   * constraints.
+   * standard structure and OCL automatically discovers all metamodels, instances, and constraints.
    *
    * <p><b>Required:</b>
    *
@@ -105,7 +104,7 @@ public class Main {
   private static void demoProjectEvaluation() throws Exception {
     printSection("1. Project-Based Evaluation (Convention over Configuration)");
 
-    BatchValidationResult result = VitruvOCL.evaluateProject(Path.of("."));
+    BatchValidationResult result = OCL.evaluateProject(Path.of("."));
 
     System.out.println("Result: " + result.getSummary());
     System.out.println("Detailed Report: \n" + result.getDetailedReport());
@@ -132,8 +131,7 @@ public class Main {
   private static void demoCustomConstraintLocation() throws Exception {
     printSection("2. Custom Constraint File Location");
 
-    BatchValidationResult result =
-        VitruvOCL.evaluateProject(Path.of("constraints.ocl"), Path.of("."));
+    BatchValidationResult result = OCL.evaluateProject(Path.of("constraints.ocl"), Path.of("."));
 
     System.out.println("Result: " + result.getSummary());
     System.out.println();
@@ -163,7 +161,7 @@ public class Main {
 
     // Only use matching instances to demonstrate clean file-based evaluation
     BatchValidationResult result =
-        VitruvOCL.evaluateConstraints(
+        OCL.evaluateConstraints(
             Path.of("constraints.ocl"),
             new Path[] {
               Path.of("ecore/spaceMission.ecore"), Path.of("ecore/satelliteSystem.ecore")
@@ -211,7 +209,7 @@ public class Main {
             "context spaceMission::Spacecraft inv: self.operational");
 
     BatchValidationResult result =
-        VitruvOCL.evaluateConstraints(
+        OCL.evaluateConstraints(
             constraints,
             new Path[] {Path.of("metamodels/spaceMission.ecore")},
             new Path[] {Path.of("instances/spacecraft-voyager.spacemission")});
@@ -252,7 +250,7 @@ public class Main {
     printSection("5. Single Constraint Evaluation");
 
     ConstraintResult result =
-        VitruvOCL.evaluateConstraint(
+        OCL.evaluateConstraint(
             "context spaceMission::Spacecraft inv: self.mass > 0",
             new Path[] {Path.of("metamodels/spaceMission.ecore")},
             new Path[] {Path.of("instances/spacecraft-voyager.spacemission")});
@@ -302,7 +300,7 @@ public class Main {
         """;
 
     ConstraintResult result =
-        VitruvOCL.evaluateConstraint(
+        OCL.evaluateConstraint(
             constraint,
             new Path[] {
               Path.of("metamodels/spaceMission.ecore"), Path.of("metamodels/satelliteSystem.ecore")
@@ -342,7 +340,7 @@ public class Main {
   private static void demoBatchAnalysis() throws Exception {
     printSection("7. Batch Result Analysis");
 
-    BatchValidationResult result = VitruvOCL.evaluateProject(Path.of("."));
+    BatchValidationResult result = OCL.evaluateProject(Path.of("."));
 
     System.out.println("Total constraints evaluated: " + result.getResults().size());
     System.out.println("All compiled successfully: " + result.allSucceeded());

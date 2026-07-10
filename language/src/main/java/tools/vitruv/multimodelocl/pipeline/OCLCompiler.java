@@ -28,7 +28,7 @@ import tools.vitruv.multimodelocl.symboltable.SymbolTableImpl;
 import tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor;
 
 /**
- * 3-pass compiler for VitruvOCL constraints.
+ * 3-pass compiler for OCL constraints.
  *
  * <p>Executes compilation pipeline:
  *

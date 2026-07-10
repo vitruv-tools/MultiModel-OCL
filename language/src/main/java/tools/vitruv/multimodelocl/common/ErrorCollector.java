@@ -14,6 +14,9 @@ package tools.vitruv.multimodelocl.common;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.tree.TerminalNode;
 
 /**
  * Collects compilation errors across all compiler passes without halting execution.
@@ -60,6 +63,61 @@ public class ErrorCollector {
    */
   public void add(CompileError error) {
     errors.add(error);
+  }
+
+  /**
+   * Adds an error whose range spans the full {@link ParserRuleContext} — from its first to its
+   * last token. This is the preferred overload inside visitors because the stop token gives the
+   * precise end of the erroneous sub-expression, making the squiggly underline in VS Code exactly
+   * as wide as the offending text.
+   *
+   * @param ctx      The parse tree node covering the erroneous expression
+   * @param message  Human-readable error description
+   * @param severity Error severity level
+   * @param source   Source identifier (e.g. {@code "type-checker"})
+   */
+  public void add(
+      ParserRuleContext ctx, String message, ErrorSeverity severity, String source) {
+    Token start = ctx.getStart();
+    Token stop  = ctx.getStop();
+
+    int startLine = start != null ? start.getLine()               : 0;
+    int startCol  = start != null ? start.getCharPositionInLine() : 0;
+    int endLine;
+    int endCol;
+
+    if (stop != null
+        && (stop.getLine() > start.getLine()
+            || (stop.getLine() == start.getLine()
+                && stop.getCharPositionInLine() >= start.getCharPositionInLine()))) {
+      // Normal case: stop comes at or after start.
+      endLine = stop.getLine();
+      endCol  = stop.getCharPositionInLine() + stop.getText().length();
+    } else {
+      // Inverted or missing stop — ANTLR error recovery produced a bogus span.
+      // Fall back to highlighting just the start token.
+      endLine = startLine;
+      endCol  = startCol + (start != null && start.getText() != null ? start.getText().length() : 1);
+    }
+
+    errors.add(new CompileError(startLine, startCol, endLine, endCol, message, severity, source, null));
+  }
+
+  /**
+   * Adds an error that covers exactly one {@link Token} — the squiggle is as wide as the token text.
+   * Use this when you know the precise offending token (e.g. an unknown metamodel name).
+   */
+  public void add(Token token, String message, ErrorSeverity severity, String source) {
+    if (token == null) return;
+    int line   = token.getLine();
+    int col    = token.getCharPositionInLine();
+    int endCol = col + token.getText().length();
+    errors.add(new CompileError(line, col, line, endCol, message, severity, source, null));
+  }
+
+  /** Convenience overload for a {@link TerminalNode}. */
+  public void add(TerminalNode node, String message, ErrorSeverity severity, String source) {
+    if (node != null) add(node.getSymbol(), message, severity, source);
   }
 
   /**
