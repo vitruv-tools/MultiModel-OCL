@@ -101,6 +101,11 @@ public class SmartLoader {
       return new LoadResult(wrapper, fileErrors, warnings);
     }
 
+    // Resolve platform:/plugin/ supertype references (e.g. PCM's Identifier/Units ecores) to
+    // local copies among the supplied ecore files, so cross-ecore eSuperTypes are visible to
+    // EMF outside of an Eclipse/OSGi runtime.
+    wrapper.registerWorkspaceEcoresForPlatformResolution(resolvedEcores);
+
     // Map files to package names
     Map<String, Path> availableEcores = new HashMap<>();
     Map<String, List<Path>> availableXmis = new HashMap<>();

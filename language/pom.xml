@@ -209,7 +209,6 @@
                                     <mainClass>tools.vitruv.multimodelocl.cli.MultiModelOCLCLI</mainClass>
                                 </transformer>
                             </transformers>
-                            <finalName>multimodelocl</finalName>
                         </configuration>
                     </execution>
                 </executions>

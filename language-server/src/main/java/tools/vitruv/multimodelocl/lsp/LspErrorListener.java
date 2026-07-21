@@ -11,9 +11,12 @@ package tools.vitruv.multimodelocl.lsp;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.logging.Logger;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
+import org.antlr.v4.runtime.Token;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.Position;
@@ -28,6 +31,14 @@ import org.eclipse.lsp4j.Range;
  */
 final class LspErrorListener extends BaseErrorListener {
 
+  private static final Logger LOG = Logger.getLogger(LspErrorListener.class.getName());
+
+  /** OCL structure keywords users might mistype — checked for "did you mean?" suggestions. */
+  private static final List<String> OCL_KEYWORDS =
+      List.of(
+          "context", "inv", "self", "implies", "and", "or", "xor", "not", "if", "then", "else",
+          "endif", "let", "in", "null", "true", "false");
+
   private final List<Diagnostic> diagnostics = new ArrayList<>();
 
   @Override
@@ -41,15 +52,52 @@ final class LspErrorListener extends BaseErrorListener {
 
     // ANTLR: line is 1-based → LSP: 0-based.
     int lspLine = Math.max(0, line - 1);
-    int lspChar = Math.max(0, charPositionInLine);
+    int lspStart = Math.max(0, charPositionInLine);
 
-    Position start = new Position(lspLine, lspChar);
-    Position end = new Position(lspLine, lspChar + 1);
+    // Try to produce a better message when the offending token looks like a keyword typo.
+    String suggestion = null;
+    int lspEnd = lspStart + 1;
 
-    Diagnostic diag = new Diagnostic(new Range(start, end), msg, DiagnosticSeverity.Error, "multimodelocl");
+    if (offendingSymbol instanceof Token tok) {
+      String text = tok.getText();
+      lspEnd = lspStart + Math.max(1, text.length());
+
+      if (!text.equals("<EOF>") && text.chars().allMatch(Character::isLetterOrDigit)) {
+        String lower = text.toLowerCase(Locale.ROOT);
+        String best =
+            OCL_KEYWORDS.stream()
+                .min(
+                    java.util.Comparator.comparingInt(
+                        k -> EditDistance.damerauLevenshtein(lower, k)))
+                .orElse(null);
+        int dist = best == null ? Integer.MAX_VALUE : EditDistance.damerauLevenshtein(lower, best);
+        int threshold = EditDistance.editThreshold(text.length());
+
+        if (dist <= threshold) {
+          msg = "Unknown keyword '" + text + "' — did you mean '" + best + "'?";
+          suggestion = best;
+        }
+      }
+    }
+
+    Position start = new Position(lspLine, lspStart);
+    Position end = new Position(lspLine, lspEnd);
+
+    Diagnostic diag =
+        new Diagnostic(new Range(start, end), msg, DiagnosticSeverity.Error, "multimodelocl");
+    if (suggestion != null) {
+      diag.setData(suggestion); // enables Quick Fix replacement in OCLTextDocumentService
+    }
     diagnostics.add(diag);
-    System.err.printf("[OCL-LS] DIAG syntax-error   L%d:C%d → L%d:C%d  %s%n",
-        lspLine, lspChar, lspLine, lspChar + 1, msg);
+    final int capLine = lspLine;
+    final int capStart = lspStart;
+    final int capEnd = lspEnd;
+    final String capMsg = msg;
+    LOG.fine(
+        () ->
+            String.format(
+                "[OCL-LS] DIAG syntax-error   L%d:C%d → L%d:C%d  %s",
+                capLine, capStart, capLine, capEnd, capMsg));
   }
 
   List<Diagnostic> getDiagnostics() {

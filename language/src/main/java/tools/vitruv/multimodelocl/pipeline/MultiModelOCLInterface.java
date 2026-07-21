@@ -136,22 +136,23 @@ public class MultiModelOCLInterface {
 
     List<Warning> warnings = new ArrayList<>(loadResult.warnings);
 
-    // Retrieve violating EObjects directly from the evaluator
+    // Retrieve violation records (including @severity / @message annotations) from the evaluator
     EvaluationVisitor evaluator = compiler.getLastEvaluator();
-    List<EObject> violatingInstances =
-        evaluator != null ? evaluator.getViolatingInstances() : List.of();
+    List<EvaluationVisitor.ViolationRecord> violationRecords =
+        evaluator != null ? evaluator.getViolationRecords() : List.of();
 
-    boolean satisfied = violatingInstances.isEmpty();
+    boolean satisfied = violationRecords.isEmpty();
+    String constraintName = extractConstraintName(constraint);
 
-    for (EObject instance : violatingInstances) {
-      String sourceFile = loadResult.wrapper.getSourceFileForInstance(instance);
+    for (EvaluationVisitor.ViolationRecord violation : violationRecords) {
+      String sourceFile = loadResult.wrapper.getSourceFileForInstance(violation.instance());
       String filename = sourceFile != null ? sourceFile : "unknown";
-      String instanceLabel = describeInstance(instance);
-      String constraintName = extractConstraintName(constraint);
+      String instanceLabel = describeInstance(violation.instance());
+      String message = violation.customMessage() != null ? violation.customMessage() : instanceLabel;
       warnings.add(
           new Warning(
               Warning.WarningType.CONSTRAINT_VIOLATION,
-              "[VIOLATION] " + constraintName + " @ " + filename + " :: " + instanceLabel));
+              "[" + violation.severity() + "] " + constraintName + " @ " + filename + " :: " + message));
     }
 
     return new ConstraintResult(

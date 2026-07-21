@@ -83,7 +83,7 @@ public class OCLLanguageServer implements LanguageServer, LanguageClientAware {
 
     // Completion: trigger on '.' (property access) and ':' (detects '::' namespace separator).
     CompletionOptions completionOptions = new CompletionOptions();
-    completionOptions.setTriggerCharacters(List.of(".", ":"));
+    completionOptions.setTriggerCharacters(List.of(".", ":", "@", " "));
     completionOptions.setResolveProvider(false);
     caps.setCompletionProvider(completionOptions);
 
@@ -103,6 +103,9 @@ public class OCLLanguageServer implements LanguageServer, LanguageClientAware {
 
     // Inlay hints: type annotations for let-variables, iterator vars, and metaclass attributes.
     caps.setInlayHintProvider(Either.forLeft(true));
+
+    // Code actions: Quick Fix for unknown operations ("did you mean?" replace).
+    caps.setCodeActionProvider(Either.forLeft(true));
 
     return CompletableFuture.completedFuture(new InitializeResult(caps));
   }
@@ -162,6 +165,10 @@ public class OCLLanguageServer implements LanguageServer, LanguageClientAware {
     } else if (params.getRootUri() != null) {
       scanForEcore(uriToPath(params.getRootUri()), ecoreFiles);
     }
+
+    // Before loading: register platform:/plugin/ → local-file mappings so cross-ecore
+    // inheritance (e.g. PCMRandomVariable → stoex::RandomVariable) resolves automatically.
+    wrapper.registerWorkspaceEcoresForPlatformResolution(ecoreFiles);
 
     for (Path ecoreFile : ecoreFiles) {
       try {

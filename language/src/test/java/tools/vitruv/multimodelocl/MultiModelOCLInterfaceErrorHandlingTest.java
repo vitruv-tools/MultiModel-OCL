@@ -199,6 +199,36 @@ public class MultiModelOCLInterfaceErrorHandlingTest {
   }
 
   /**
+   * Tests that {@code @severity} and {@code @message} invariant annotations are honored: the
+   * violation warning carries the declared severity tag instead of the default, and the custom
+   * message template is interpolated with {@code {self.attr}} placeholders.
+   */
+  @Test
+  public void testSeverityAndMessageAnnotations() {
+    ConstraintResult result =
+        MultiModelOCLInterface.evaluateConstraint(
+            "context spaceMission::Spacecraft "
+                + "inv: @severity CRITICAL @message \"{self.name} is not operational\" "
+                + "self.operational",
+            new Path[] {SPACEMISSION_ECORE},
+            new Path[] {SPACECRAFT_INACTIVE});
+
+    assertTrue(result.isSuccess(), "Compilation succeeds");
+    assertFalse(result.isSatisfied(), "Inactive spacecraft violates the constraint");
+
+    List<Warning> violations =
+        result.getWarnings().stream()
+            .filter(w -> w.getType() == Warning.WarningType.CONSTRAINT_VIOLATION)
+            .toList();
+
+    assertEquals(1, violations.size(), "Exactly one violation expected");
+    String message = violations.get(0).getMessage();
+    assertTrue(message.contains("[CRITICAL]"), "Should use the declared @severity");
+    assertTrue(
+        message.contains("is not operational"), "Should use the interpolated @message template");
+  }
+
+  /**
    * Tests that partial constraint violations are detected and reported with indices of violating
    * instances.
    */
@@ -220,8 +250,8 @@ public class MultiModelOCLInterfaceErrorHandlingTest {
 
     assertEquals(1, violations.size(), "Only inactive should violate, not active");
     assertTrue(
-        violations.get(0).getMessage().contains("[VIOLATION]"),
-        "Should use standard violation format");
+        violations.get(0).getMessage().contains("[WARNING]"),
+        "Should use standard violation format with default severity");
     assertTrue(
         violations.get(0).getMessage().contains("Inactive-1")
             || violations.get(0).getMessage().contains("SC-009"),
@@ -278,6 +308,75 @@ public class MultiModelOCLInterfaceErrorHandlingTest {
 
     assertFalse(result.isSuccess());
     assertFalse(result.getCompilerErrors().isEmpty(), "Should have syntax errors");
+  }
+
+  /**
+   * Tests that a typo'd operation name gets a "did you mean?" quick-fix suggestion attached to the
+   * compiler error.
+   */
+  @Test
+  public void testUnknownOperationSuggestsClosestMatch() {
+    ConstraintResult result =
+        MultiModelOCLInterface.evaluateConstraint(
+            "context spaceMission::Spacecraft inv: self.name.lenght() > 0",
+            new Path[] {SPACEMISSION_ECORE},
+            new Path[] {SPACECRAFT_VOYAGER});
+
+    assertFalse(result.isSuccess());
+    assertFalse(result.getCompilerErrors().isEmpty());
+    assertTrue(
+        result.getCompilerErrors().stream()
+            .anyMatch(e -> "length".equals(e.getSuggestion())),
+        "Typo 'lenght' should suggest 'length'");
+  }
+
+  /**
+   * Tests that an undefined variable resembling the {@code self} keyword gets a "did you mean?"
+   * suggestion.
+   */
+  @Test
+  public void testUndefinedVariableSuggestsKeyword() {
+    ConstraintResult result =
+        MultiModelOCLInterface.evaluateConstraint(
+            "context spaceMission::Spacecraft inv: slef.name == \"Voyager\"",
+            new Path[] {SPACEMISSION_ECORE},
+            new Path[] {SPACECRAFT_VOYAGER});
+
+    assertFalse(result.isSuccess());
+    assertFalse(result.getCompilerErrors().isEmpty());
+    assertTrue(
+        result.getCompilerErrors().stream().anyMatch(e -> "self".equals(e.getSuggestion())),
+        "Typo 'slef' should suggest 'self'");
+  }
+
+  /**
+   * Tests that an iterator op called with completely empty parens (e.g. {@code select()}) — as
+   * opposed to a missing body only — gets a clear, actionable message instead of a raw ANTLR
+   * "mismatched input ')' expecting {...}" token dump.
+   */
+  @Test
+  public void testIteratorOpWithEmptyParensGivesActionableMessage() {
+    ConstraintResult result =
+        MultiModelOCLInterface.evaluateConstraint(
+            "context spaceMission::Spacecraft inv: self.name == \"Voyager\" implies"
+                + " spaceMission::Spacecraft.allInstances().select().notEmpty()",
+            new Path[] {SPACEMISSION_ECORE},
+            new Path[] {SPACECRAFT_VOYAGER});
+
+    assertFalse(result.isSuccess());
+    assertFalse(result.getCompilerErrors().isEmpty());
+    assertTrue(
+        result.getCompilerErrors().stream()
+            .anyMatch(
+                e ->
+                    e.getMessage().contains("select")
+                        && e.getMessage().contains("iterator variable")),
+        "Should explain that 'select' needs an iterator variable and body, got: "
+            + result.getCompilerErrors());
+    assertTrue(
+        result.getCompilerErrors().stream()
+            .noneMatch(e -> e.getMessage().contains("mismatched input")),
+        "Should not leak a raw ANTLR token-dump message");
   }
 
   /** Tests that references to undefined attributes are detected as compiler errors. */
@@ -628,7 +727,7 @@ public class MultiModelOCLInterfaceErrorHandlingTest {
     assertEquals(1, violations.size(), "Should have exactly one violation");
 
     String message = violations.get(0).getMessage();
-    assertTrue(message.contains("[VIOLATION]"), "Violation should use standard format");
+    assertTrue(message.contains("[WARNING]"), "Violation should use standard format with default severity");
     assertTrue(message.contains("operationalCheck"), "Violation should include constraint name");
     assertTrue(message.contains("Spacecraft"), "Violation should reference Spacecraft");
     assertFalse(

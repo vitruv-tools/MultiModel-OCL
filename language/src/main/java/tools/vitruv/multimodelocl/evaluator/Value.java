@@ -30,7 +30,7 @@ import tools.vitruv.multimodelocl.typechecker.Type;
  * unordered - [τ] (Sequence): Non-unique, ordered - {{τ}} (Bag): Non-unique, unordered - ⟨τ⟩
  * (OrderedSet): Unique, ordered
  */
-public class Value {
+public class Value implements Comparable<Value> {
 
   /** The actual value - in OCL, this is ALWAYS List&lt;OCLElement&gt;. */
   private final List<OCLElement> elements;
@@ -539,5 +539,67 @@ public class Value {
   /** Convenience: Creates float singleton. */
   public static Value floatValue(float value) {
     return singleton(new OCLElement.FloatValue(value), Type.FLOAT);
+  }
+
+  /**
+   * Compares this value to another by size then element-wise via {@link OCLElement#compare}.
+   *
+   * <p>Null is ordered before any non-null value.
+   */
+  @Override
+  public int compareTo(Value other) {
+    if (this == other) {
+      return 0;
+    }
+    if (other == null) {
+      return 1;
+    }
+    int sizeCompare = Integer.compare(this.size(), other.size());
+    if (sizeCompare != 0) {
+      return sizeCompare;
+    }
+    List<OCLElement> elems1 = this.getElements();
+    List<OCLElement> elems2 = other.getElements();
+    for (int i = 0; i < elems1.size(); i++) {
+      int elemCompare = OCLElement.compare(elems1.get(i), elems2.get(i));
+      if (elemCompare != 0) {
+        return elemCompare;
+      }
+    }
+    return 0;
+  }
+
+  /**
+   * Compares this value to {@code obj} for equality, consistent with {@link #compareTo}.
+   *
+   * @param obj the object to compare to
+   * @return {@code true} if {@code obj} is a {@link Value} whose {@link #compareTo} result is zero
+   */
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) {
+      return true;
+    }
+    if (!(obj instanceof Value other)) {
+      return false;
+    }
+    return compareTo(other) == 0;
+  }
+
+  /**
+   * Returns a hash code consistent with {@link #equals(Object)}. Numeric elements are hashed by
+   * their {@code double} value so that cross-numeric-type equal values hash identically.
+   *
+   * @return the hash code
+   */
+  @Override
+  public int hashCode() {
+    int result = size();
+    for (OCLElement elem : elements) {
+      int elemHash =
+          OCLElement.isNumeric(elem) ? Double.hashCode(elem.toDoubleValue()) : elem.hashCode();
+      result = 31 * result + elemHash;
+    }
+    return result;
   }
 }

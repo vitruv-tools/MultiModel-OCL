@@ -34,10 +34,19 @@ classifierContextCS
 
 invCS
 :
-    'inv' (ID ('(' specificationCS ')')?)? ':' specificationCS
+    'inv' (ID ('(' specificationCS ')')?)? ':' annotationCS* specificationCS
+;
+
+// Constraint annotations (@severity / @message) placed between ':' and the body expression.
+annotationCS
+:
+    AT_SEVERITY severityValue=ID   # severityAnnotation
+    | AT_MESSAGE message=STRING    # messageAnnotation
 ;
 
 CONTEXT: 'context';
+AT_SEVERITY: '@severity';
+AT_MESSAGE: '@message';
 
 // ============================================================================
 // TYPE SYSTEM
@@ -100,6 +109,9 @@ infixedExpCS
     | left=infixedExpCS op=('+'|'-') right=infixedExpCS                    # additive
     | left=infixedExpCS op='==' right=infixedExpCS                         # equalityComparison
     | left=infixedExpCS op='!=' right=infixedExpCS                         # inequalityComparison
+    | left=infixedExpCS op=INVALID_OP_SEQ right=infixedExpCS              # invalidBinaryOp
+    | left=infixedExpCS op=MULTI_EQ right=infixedExpCS                    # multiEqualsOp
+    | left=infixedExpCS '=' right=infixedExpCS                             # singleEqualsOp
     | left=infixedExpCS op='<' right=infixedExpCS                          # lessThanComparison
     | left=infixedExpCS op='<=' right=infixedExpCS                         # lessThanOrEqualComparison
     | left=infixedExpCS op='>' right=infixedExpCS                          # greaterThanComparison
@@ -234,6 +246,26 @@ operationCall
     | iteratorOpCS   # iteratorOperation
     | typeOpCS       # typeOperation
     | unknownOpCS    # unknownOperation
+    // Fallback: no-arg operation called with arguments — e.g. allInstances(B), size(x)
+    | op=('allInstances'|'size'|'isEmpty'|'notEmpty'|'first'|'last'|'reverse'
+         |'asSet'|'asBag'|'asSequence'|'asOrderedSet'|'lift'
+         |'abs'|'floor'|'ceiling'|'round')
+      '(' args+=expCS (',' args+=expCS)* ')'              # noArgOpWithArgs
+    // Fallback: ANY operation keyword used without parentheses — e.g. .notEmpty, .select, .concat
+    | op=('size'|'isEmpty'|'notEmpty'|'first'|'last'|'reverse'
+         |'asSet'|'asBag'|'asSequence'|'asOrderedSet'|'lift'
+         |'abs'|'floor'|'ceiling'|'round'|'allInstances'
+         |'select'|'reject'|'exists'|'forAll'|'collect'|'collectNested'
+         |'one'|'any'|'isUnique'|'sortedBy'|'iterate'
+         |'oclIsKindOf'|'oclIsTypeOf'|'oclAsType'
+         |'includes'|'excludes'|'includesAll'|'excludesAll'
+         |'including'|'excluding'|'union'|'intersection'|'symmetricDifference'
+         |'indexOf'|'at'|'append'|'prepend'|'insertAt'|'subSequence'
+         |'concat'|'substring'|'length'|'toLower'|'toUpper'
+         |'toInteger'|'toReal'|'matches'|'equalsIgnoreCase'
+         |'substituteAll'|'substituteFirst'|'tokenize'|'characters'
+         |'flatten'|'sum'|'min'|'max'|'avg'|'count'
+         |'div'|'mod'|'indexOf')  # opMissingParens
 ;
 
 // Catch-all for operation calls whose name is not a recognised keyword.
@@ -309,6 +341,10 @@ iteratorOpCS
     | 'sortedBy' '(' iteratorVars=iteratorVarList '|' body=expCS ')'              # sortedByOp
     | 'collectNested' '(' iteratorVars=iteratorVarList '|' body=expCS ')'         # collectNestedOp
     | 'iterate' '(' iterateVarSpec '|' body=expCS ')'                             # iterateOp
+    // Fallback: iterator keyword used without '| body' — caught for better error reporting
+    | op=('select'|'reject'|'exists'|'forAll'|'collect'|'one'|'any'|'isUnique'|'sortedBy'|'collectNested') '(' iteratorVars=iteratorVarList ')'  # iteratorMissingBody
+    // Fallback: iterator keyword called with completely empty parens — e.g. select()
+    | op=('select'|'reject'|'exists'|'forAll'|'collect'|'one'|'any'|'isUnique'|'sortedBy'|'collectNested') '(' ')'  # iteratorMissingVarAndBody
 ;
 
 // iterate(elem; acc : Type = initExpr | body)
@@ -371,7 +407,7 @@ BooleanLiteralExpCS
 
 ID
 :
-    [a-zA-Z][a-zA-Z0-9]*
+    [a-zA-Z_][a-zA-Z0-9_]*
 ;
 
 STRING
@@ -383,6 +419,20 @@ UnterminatedStringLiteral
 :
     '"' (~["\\\r\n] | '\\' (. | EOF))*
 ;
+
+// Any sequence of 2+ arithmetic/comparison operator characters that is not a
+// valid OCL operator. Defined as a single lexer token so the parser can
+// produce a precise "Invalid operator" diagnostic instead of a cascading error.
+//
+// OpChar excludes '=' and '!' so that '<=', '>=', '==', '!=' are not consumed.
+// '--' is intentionally excluded: it starts a line comment in OCL.
+// Maximal munch guarantees that '+-+', '++', '**', '<>', ... are all caught.
+INVALID_OP_SEQ : OpChar OpChar+ ;
+fragment OpChar : [+\-*/<>] ;
+
+// Three or more consecutive '=' signs (e.g. ===, ====, =======).
+// Defined before '==' so maximal munch picks this over '==' + '='.
+MULTI_EQ : '==' '='+ ;
 
 fragment DIGIT: [0-9];
 INT: DIGIT+;

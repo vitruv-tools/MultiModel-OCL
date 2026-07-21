@@ -15,6 +15,7 @@ import org.eclipse.emf.ecore.EStructuralFeature;
 import org.eclipse.emf.ecore.EcorePackage;
 import tools.vitruv.multimodelocl.OCLParser;
 import tools.vitruv.multimodelocl.common.AbstractPhaseVisitor;
+import tools.vitruv.multimodelocl.common.CompileError;
 import tools.vitruv.multimodelocl.common.ErrorCollector;
 import tools.vitruv.multimodelocl.common.ErrorSeverity;
 import tools.vitruv.multimodelocl.evaluator.EvaluationVisitor;
@@ -168,24 +169,216 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
 
   // ==================== Error Reporting ====================
 
+  /** OCL keywords that look like variable names and are commonly mistyped. */
+  private static final List<String> KEYWORD_LIKE_NAMES = List.of("self", "true", "false");
+
+  /** Keyword binary operators — candidates for "did you mean?" suggestions. */
+  private static final List<String> KNOWN_BINARY_OPS = List.of("and", "or", "xor", "implies");
+
+  private static final String ERR_DID_YOU_MEAN = "' — did you mean '";
+  private static final String ERR_UNKNOWN_OP = "Unknown operation '";
+  private static final String ERR_OP_DOES_NOT_EXIST = "' — this operation does not exist";
+
+  private static int editThreshold(int len) {
+    if (len <= 3) {
+      return 1;
+    }
+    if (len <= 6) {
+      return 2;
+    }
+    return 3;
+  }
+
+  /**
+   * Computes the Damerau-Levenshtein (Optimal String Alignment) distance between two strings.
+   *
+   * <p>Counts insertions, deletions, substitutions and <em>adjacent transpositions</em> (e.g.
+   * {@code "adn"} → {@code "and"} = 1 move). This is better than plain Levenshtein for catching
+   * real typing mistakes where two neighbouring characters are accidentally swapped.
+   *
+   * <p>Time O(|a|·|b|), space O(|a|·|b|).
+   */
+  private static int levenshtein(String a, String b) {
+    if (a.equals(b)) {
+      return 0;
+    }
+    if (a.isEmpty()) {
+      return b.length();
+    }
+    if (b.isEmpty()) {
+      return a.length();
+    }
+
+    int la = a.length();
+    int lb = b.length();
+    int[][] d = new int[la + 1][lb + 1];
+
+    for (int i = 0; i <= la; i++) {
+      d[i][0] = i;
+    }
+    for (int j = 0; j <= lb; j++) {
+      d[0][j] = j;
+    }
+
+    for (int i = 1; i <= la; i++) {
+      for (int j = 1; j <= lb; j++) {
+        int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+        d[i][j] =
+            Math.min(
+                d[i - 1][j] + 1, // deletion
+                Math.min(
+                    d[i][j - 1] + 1, // insertion
+                    d[i - 1][j - 1] + cost)); // substitution
+        // Adjacent transposition (Damerau extension)
+        if (i > 1
+            && j > 1
+            && a.charAt(i - 1) == b.charAt(j - 2)
+            && a.charAt(i - 2) == b.charAt(j - 1)) {
+          d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + cost);
+        }
+      }
+    }
+
+    return d[la][lb];
+  }
+
+  /**
+   * All operation names known to MultiModelOCL.
+   *
+   * <p>Used by {@link #suggestOperation} to propose the closest match when an unknown operation
+   * name is encountered.
+   */
+  private static final List<String> KNOWN_OPERATIONS =
+      List.of(
+          // Collection query
+          "isEmpty", "notEmpty", "size", "count", "includes", "excludes", "includesAll",
+          "excludesAll", "first", "last", "at", "reverse",
+          // Collection modification
+          "including", "excluding", "union", "intersection", "symmetricDifference", "flatten",
+          "append", "prepend", "insertAt", "subSequence",
+          // Collection conversion
+          "asSet", "asBag", "asSequence", "asOrderedSet", "lift",
+          // Aggregation
+          "sum", "max", "min", "avg",
+          // Numeric
+          "abs", "floor", "ceil", "ceiling", "round",
+          // Iterator
+          "select", "reject", "collect", "collectNested", "forAll", "exists", "one", "any",
+          "isUnique", "sortedBy", "iterate",
+          // String
+          "concat", "substring", "length", "toUpper", "toLower", "indexOf", "equalsIgnoreCase",
+          "characters", "tokenize", "substituteAll", "substituteFirst", "matches", "toInteger",
+          "toReal",
+          // Type / meta
+          "oclIsKindOf", "oclIsTypeOf", "oclAsType", "allInstances");
+
+  /** Operations that take no arguments — used to phrase the "add parentheses" quick fix. */
+  private static final java.util.Set<String> NO_ARG_OPS =
+      java.util.Set.of(
+          "size", "isEmpty", "notEmpty", "first", "last", "reverse", "asSet", "asBag",
+          "asSequence", "asOrderedSet", "lift", "abs", "floor", "ceiling", "round",
+          "allInstances");
+
+  /**
+   * Returns the single closest known operation name to {@code typed}, regardless of distance.
+   *
+   * <p>Used to populate the Quick Fix even when the name is too different for a confident "did you
+   * mean?" message. Returns {@code null} only when {@code KNOWN_OPERATIONS} is empty.
+   */
+  private static String bestOperation(String typed) {
+    String lower = typed.toLowerCase(java.util.Locale.ROOT);
+    String best = null;
+    int bestDist = Integer.MAX_VALUE;
+    for (String known : KNOWN_OPERATIONS) {
+      int dist = levenshtein(lower, known.toLowerCase(java.util.Locale.ROOT));
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = known;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Returns the closest known operation name to {@code typed} if it is within the edit-distance
+   * threshold, otherwise returns empty.
+   *
+   * <p>Threshold scales with name length:
+   *
+   * <ul>
+   *   <li>1–3 chars → max distance 1
+   *   <li>4–6 chars → max distance 2
+   *   <li>7+ chars → max distance 3
+   * </ul>
+   *
+   * <p>Comparison is case-insensitive so "Select" suggests "select".
+   */
+  private static java.util.Optional<String> suggestOperation(String typed) {
+    int threshold = editThreshold(typed.length());
+    String lower = typed.toLowerCase(java.util.Locale.ROOT);
+
+    String best = null;
+    int bestDist = threshold + 1;
+
+    for (String known : KNOWN_OPERATIONS) {
+      int dist = levenshtein(lower, known.toLowerCase(java.util.Locale.ROOT));
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = known;
+      }
+    }
+
+    return java.util.Optional.ofNullable(best);
+  }
+
   /**
    * Handles undefined symbol errors.
    *
-   * <p>Currently throws {@link UnsupportedOperationException} - should be implemented to report
-   * errors properly.
+   * <p>Reports a "did you mean" suggestion when the name is a near-miss of a keyword that looks
+   * like a variable ({@code self}, {@code true}, {@code false}).
    *
    * @param name The undefined symbol name
    * @param ctx The parse tree context where the error occurred
-   * @throws UnsupportedOperationException Always (not yet implemented)
    */
   @Override
   protected void handleUndefinedSymbol(String name, ParserRuleContext ctx) {
+    String lower = name.toLowerCase(java.util.Locale.ROOT);
+
+    String bestKeyword =
+        KEYWORD_LIKE_NAMES.stream()
+            .min(
+                java.util.Comparator.comparingInt(
+                    k -> levenshtein(lower, k.toLowerCase(java.util.Locale.ROOT))))
+            .orElse(null);
+    int kwDist =
+        bestKeyword == null
+            ? Integer.MAX_VALUE
+            : levenshtein(lower, bestKeyword.toLowerCase(java.util.Locale.ROOT));
+
+    int threshold = editThreshold(name.length());
+    String message;
+    String suggestion;
+    if (kwDist <= threshold) {
+      message = "Undefined variable '" + name + ERR_DID_YOU_MEAN + bestKeyword + "'?";
+      suggestion = bestKeyword;
+    } else {
+      message = "Undefined variable: " + name;
+      suggestion = null;
+    }
+
+    org.antlr.v4.runtime.Token tok = ctx.getStart();
+    int endCol = tok.getCharPositionInLine() + tok.getText().length();
     errors.add(
-        ctx.getStart().getLine(),
-        ctx.getStart().getCharPositionInLine(),
-        "Undefined variable: " + name,
-        ErrorSeverity.ERROR,
-        "type-checker");
+        new CompileError(
+            tok.getLine(),
+            tok.getCharPositionInLine(),
+            tok.getLine(),
+            endCol,
+            message,
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null,
+            suggestion));
   }
 
   // ==================== Context Declaration ====================
@@ -310,6 +503,36 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
    */
   @Override
   public Type visitInvCS(OCLParser.InvCSContext ctx) {
+    // Check for duplicate @severity / @message annotations
+    long severityCount =
+        ctx.annotationCS().stream()
+            .filter(a -> a instanceof OCLParser.SeverityAnnotationContext)
+            .count();
+    long messageCount =
+        ctx.annotationCS().stream()
+            .filter(a -> a instanceof OCLParser.MessageAnnotationContext)
+            .count();
+    if (severityCount > 1) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "@severity may only appear once per constraint",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+    if (messageCount > 1) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "@message may only appear once per constraint",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+    // Validate annotations before type-checking the body
+    for (OCLParser.AnnotationCSContext ann : ctx.annotationCS()) {
+      visit(ann);
+    }
+
     List<OCLParser.SpecificationCSContext> specs = ctx.specificationCS();
     Type resultType = Type.BOOLEAN;
 
@@ -347,6 +570,30 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
 
     nodeTypes.put(ctx, resultType);
     return resultType;
+  }
+
+  // ==================== Annotations ====================
+
+  private static final java.util.Set<String> VALID_SEVERITIES =
+      java.util.Set.of("CRITICAL", "WARNING", "MAJOR", "MINOR", "INFO");
+
+  @Override
+  public Type visitSeverityAnnotation(OCLParser.SeverityAnnotationContext ctx) {
+    String val = ctx.severityValue.getText();
+    if (!VALID_SEVERITIES.contains(val)) {
+      errors.add(
+          ctx.getStart().getLine(),
+          ctx.getStart().getCharPositionInLine(),
+          "Unknown severity level '" + val + "'. Valid values: CRITICAL, WARNING, MAJOR, MINOR, INFO",
+          ErrorSeverity.ERROR,
+          "type-checker");
+    }
+    return Type.BOOLEAN;
+  }
+
+  @Override
+  public Type visitMessageAnnotation(OCLParser.MessageAnnotationContext ctx) {
+    return Type.BOOLEAN;
   }
 
   // ==================== Type Expressions ====================
@@ -4898,11 +5145,45 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
     // Visit both sides so errors inside them are still reported.
     visit(ctx.left);
     visit(ctx.right);
+
+    String typed = ctx.op.getText();
+    String typedLow = typed.toLowerCase(java.util.Locale.ROOT);
+
+    String best =
+        KNOWN_BINARY_OPS.stream()
+            .min(
+                java.util.Comparator.comparingInt(
+                    k -> levenshtein(typedLow, k.toLowerCase(java.util.Locale.ROOT))))
+            .orElse(null);
+    int dist =
+        best == null
+            ? Integer.MAX_VALUE
+            : levenshtein(typedLow, best.toLowerCase(java.util.Locale.ROOT));
+
+    int threshold = editThreshold(typed.length());
+    String message;
+    String suggestion;
+    if (dist <= threshold) {
+      message = "Unknown operator '" + typed + ERR_DID_YOU_MEAN + best + "'?";
+      suggestion = best;
+    } else {
+      message = "Unknown operator '" + typed + "' — this operator does not exist";
+      suggestion = best; // still offer a Quick Fix to the closest keyword op
+    }
+
+    org.antlr.v4.runtime.Token tok = ctx.op;
+    int endCol = tok.getCharPositionInLine() + tok.getText().length();
     errors.add(
-        ctx.op,
-        "Unknown operator '" + ctx.op.getText() + "'",
-        ErrorSeverity.ERROR,
-        "type-checker");
+        new CompileError(
+            tok.getLine(),
+            tok.getCharPositionInLine(),
+            tok.getLine(),
+            endCol,
+            message,
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null,
+            suggestion));
     nodeTypes.put(ctx, Type.ERROR);
     return Type.ERROR;
   }
@@ -4923,11 +5204,239 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
     for (OCLParser.ExpCSContext arg : ctx.args) {
       visit(arg);
     }
+
+    String typed = ctx.opName.getText();
+    java.util.Optional<String> close = suggestOperation(typed); // within threshold
+    String best = bestOperation(typed); // unconditional best
+
+    String message;
+    String suggestion; // stored for Quick Fix — always the best candidate
+    if (close.isPresent()) {
+      message = ERR_UNKNOWN_OP + typed + ERR_DID_YOU_MEAN + close.get() + "'?";
+      suggestion = close.get();
+    } else if (best != null) {
+      message = ERR_UNKNOWN_OP + typed + ERR_OP_DOES_NOT_EXIST;
+      suggestion = best;
+    } else {
+      message = ERR_UNKNOWN_OP + typed + ERR_OP_DOES_NOT_EXIST;
+      suggestion = null;
+    }
+
+    org.antlr.v4.runtime.Token tok = ctx.opName;
+    int endCol = tok.getCharPositionInLine() + tok.getText().length();
     errors.add(
-        ctx.opName,
-        "Unknown operation '" + ctx.opName.getText() + "'",
-        ErrorSeverity.ERROR,
-        "type-checker");
+        new CompileError(
+            tok.getLine(),
+            tok.getCharPositionInLine(),
+            tok.getLine(),
+            endCol,
+            message,
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null,
+            suggestion));
+    nodeTypes.put(ctx, Type.ERROR);
+    return Type.ERROR;
+  }
+
+  /**
+   * Checks that {@code ctx.body} is present (i.e., the user wrote {@code | body}) for iterator
+   * keywords like {@code select}/{@code exists}. Without this fallback, e.g. {@code exists(A)}
+   * (missing {@code | body}) is caught here with a precise message instead of a cryptic ANTLR
+   * parse error.
+   */
+  @Override
+  public Type visitIteratorMissingBody(OCLParser.IteratorMissingBodyContext ctx) {
+    String opName = ctx.op.getText();
+    org.antlr.v4.runtime.Token start = ctx.getStart();
+    org.antlr.v4.runtime.Token stop = ctx.getStop();
+    int endLine = stop != null ? stop.getLine() : start.getLine();
+    int endCol =
+        stop != null
+            ? stop.getCharPositionInLine() + stop.getText().length()
+            : start.getCharPositionInLine() + ctx.getText().length();
+    errors.add(
+        new CompileError(
+            start.getLine(),
+            start.getCharPositionInLine(),
+            endLine,
+            endCol,
+            "'" + opName + "' requires '| <body>' after the iterator variable(s)",
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null));
+    return Type.ERROR;
+  }
+
+  /**
+   * Checks for a completely empty iterator call, e.g. {@code select()}. Without this fallback the
+   * parser falls through to a raw ANTLR "mismatched input ')' expecting {...}" error dumping the
+   * entire start-of-expression token set, which is not actionable for the user.
+   */
+  @Override
+  public Type visitIteratorMissingVarAndBody(OCLParser.IteratorMissingVarAndBodyContext ctx) {
+    String opName = ctx.op.getText();
+    org.antlr.v4.runtime.Token start = ctx.getStart();
+    org.antlr.v4.runtime.Token stop = ctx.getStop();
+    int endLine = stop != null ? stop.getLine() : start.getLine();
+    int endCol =
+        stop != null
+            ? stop.getCharPositionInLine() + stop.getText().length()
+            : start.getCharPositionInLine() + ctx.getText().length();
+    errors.add(
+        new CompileError(
+            start.getLine(),
+            start.getCharPositionInLine(),
+            endLine,
+            endCol,
+            "'" + opName + "' requires an iterator variable and a '| <body>', e.g. '" + opName
+                + "(x | ...)'",
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null));
+    return Type.ERROR;
+  }
+
+  /** Catches a no-arg operation called with arguments — e.g. {@code allInstances(B)}, {@code size(x)}. */
+  @Override
+  public Type visitNoArgOpWithArgs(OCLParser.NoArgOpWithArgsContext ctx) {
+    for (OCLParser.ExpCSContext arg : ctx.args) {
+      visit(arg);
+    }
+    String opName = ctx.op.getText();
+    org.antlr.v4.runtime.Token start = ctx.getStart();
+    org.antlr.v4.runtime.Token stop = ctx.getStop();
+    int endLine = stop != null ? stop.getLine() : start.getLine();
+    int endCol =
+        stop != null
+            ? stop.getCharPositionInLine() + stop.getText().length()
+            : start.getCharPositionInLine() + ctx.getText().length();
+    errors.add(
+        new CompileError(
+            start.getLine(),
+            start.getCharPositionInLine(),
+            endLine,
+            endCol,
+            "'" + opName + "' takes no arguments",
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null));
+    return Type.ERROR;
+  }
+
+  /** Catches an operation keyword used without parentheses — e.g. {@code .notEmpty}, {@code .select}. */
+  @Override
+  public Type visitOpMissingParens(OCLParser.OpMissingParensContext ctx) {
+    org.antlr.v4.runtime.Token op = ctx.op;
+    String name = op.getText();
+    String suggestion;
+    String message;
+    if (NO_ARG_OPS.contains(name)) {
+      suggestion = name + "()";
+      message = "'" + name + "' is an operation — add parentheses: '" + suggestion + "'";
+    } else {
+      suggestion = name + "(...)";
+      message = "'" + name + "' is an operation that requires arguments — use '" + suggestion + "'";
+    }
+    errors.add(
+        new CompileError(
+            op.getLine(),
+            op.getCharPositionInLine(),
+            op.getLine(),
+            op.getCharPositionInLine() + op.getText().length(),
+            message,
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null,
+            suggestion));
+    return Type.ERROR;
+  }
+
+  /**
+   * Invalid operator sequences (e.g. {@code <>}, {@code ><}, {@code +-}, {@code -+}) — two or more
+   * arithmetic/comparison characters that don't form a valid operator. The operands are still
+   * visited so their own errors are reported, but the result type is {@code ERROR}.
+   */
+  @Override
+  public Type visitInvalidBinaryOp(OCLParser.InvalidBinaryOpContext ctx) {
+    visit(ctx.left);
+    visit(ctx.right);
+
+    String op = ctx.op.getText();
+    String hint =
+        switch (op) {
+          case "<>" -> " — did you mean `!=`? (OCL standard `<>` is not supported)";
+          case "><" -> " — did you mean `!=` or a comparison?";
+          case "+-" -> " — use `+` or `-` as separate operators";
+          case "-+" -> " — use `-` or `+` as separate operators";
+          default -> "";
+        };
+
+    org.antlr.v4.runtime.Token tok = ctx.op;
+    int endCol = tok.getCharPositionInLine() + tok.getText().length();
+    errors.add(
+        new CompileError(
+            tok.getLine(),
+            tok.getCharPositionInLine(),
+            tok.getLine(),
+            endCol,
+            "Invalid operator `" + op + "`" + hint,
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null));
+
+    nodeTypes.put(ctx, Type.ERROR);
+    return Type.ERROR;
+  }
+
+  /** Single {@code '='} used where OCL equality {@code '=='} was meant. */
+  @Override
+  public Type visitSingleEqualsOp(OCLParser.SingleEqualsOpContext ctx) {
+    visit(ctx.left);
+    visit(ctx.right);
+    // Point at the '=' sign: it sits right after the left operand's last token.
+    org.antlr.v4.runtime.Token eq = ctx.getStart(); // fallback
+    for (int i = 0; i < ctx.getChildCount(); i++) {
+      ParseTree child = ctx.getChild(i);
+      if (child instanceof TerminalNode tn) {
+        org.antlr.v4.runtime.Token t = tn.getSymbol();
+        if ("=".equals(t.getText())) {
+          eq = t;
+          break;
+        }
+      }
+    }
+    errors.add(
+        new CompileError(
+            eq.getLine(),
+            eq.getCharPositionInLine(),
+            eq.getLine(),
+            eq.getCharPositionInLine() + 1,
+            "Use '==' for equality comparison, not '='",
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null,
+            "=="));
+    nodeTypes.put(ctx, Type.ERROR);
+    return Type.ERROR;
+  }
+
+  /** Three or more consecutive '=' signs (e.g. {@code ===}, {@code ====}). */
+  @Override
+  public Type visitMultiEqualsOp(OCLParser.MultiEqualsOpContext ctx) {
+    visit(ctx.left);
+    visit(ctx.right);
+    errors.add(
+        new CompileError(
+            ctx.op.getLine(),
+            ctx.op.getCharPositionInLine(),
+            ctx.op.getLine(),
+            ctx.op.getCharPositionInLine() + ctx.op.getText().length(),
+            "Invalid operator '" + ctx.op.getText() + "' — did you mean '=='?",
+            ErrorSeverity.ERROR,
+            "type-checker",
+            null,
+            "=="));
     nodeTypes.put(ctx, Type.ERROR);
     return Type.ERROR;
   }
