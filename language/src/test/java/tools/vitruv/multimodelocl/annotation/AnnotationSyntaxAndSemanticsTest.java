@@ -1,4 +1,4 @@
-/*******************************************************************************
+/*
  * Copyright (c) 2026 Max Oesterle
  *
  * This program and the accompanying materials are made available under the
@@ -9,7 +9,8 @@
  *
  * Contributors:
  *    Max Oesterle - initial API and implementation
- *******************************************************************************/
+ */
+
 package tools.vitruv.multimodelocl.annotation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -77,7 +78,8 @@ class AnnotationSyntaxAndSemanticsTest {
 
   /** Runs the full three-pass pipeline and returns a {@link ConstraintResult}. */
   private static ConstraintResult eval(String constraint) {
-    return MultiModelOCLInterface.evaluateConstraint(constraint, new Path[] {ECORE}, new Path[] {XMI});
+    return MultiModelOCLInterface.evaluateConstraint(
+        constraint, new Path[] {ECORE}, new Path[] {XMI});
   }
 
   /**
@@ -515,7 +517,8 @@ class AnnotationSyntaxAndSemanticsTest {
      * list directly from the evaluator.
      */
     private List<EvaluationVisitor.ViolationRecord> getRecords(String constraint) {
-      var loadResult = SmartLoader.loadForConstraint(constraint, new Path[] {ECORE}, new Path[] {XMI});
+      var loadResult =
+          SmartLoader.loadForConstraint(constraint, new Path[] {ECORE}, new Path[] {XMI});
       assertFalse(loadResult.hasErrors(), "Load must succeed");
       var compiler = new OCLCompiler(loadResult.wrapper, null);
       compiler.compile(constraint);

@@ -148,11 +148,19 @@ public class MultiModelOCLInterface {
       String sourceFile = loadResult.wrapper.getSourceFileForInstance(violation.instance());
       String filename = sourceFile != null ? sourceFile : "unknown";
       String instanceLabel = describeInstance(violation.instance());
-      String message = violation.customMessage() != null ? violation.customMessage() : instanceLabel;
+      String message =
+          violation.customMessage() != null ? violation.customMessage() : instanceLabel;
       warnings.add(
           new Warning(
               Warning.WarningType.CONSTRAINT_VIOLATION,
-              "[" + violation.severity() + "] " + constraintName + " @ " + filename + " :: " + message));
+              "["
+                  + violation.severity()
+                  + "] "
+                  + constraintName
+                  + " @ "
+                  + filename
+                  + " :: "
+                  + message));
     }
 
     return new ConstraintResult(

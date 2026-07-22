@@ -1,4 +1,4 @@
-/*******************************************************************************
+/*
  * Copyright (c) 2026 Max Oesterle
  *
  * This program and the accompanying materials are made available under the
@@ -6,12 +6,13 @@
  * https://www.eclipse.org/legal/epl-2.0/
  *
  * SPDX-License-Identifier: EPL-2.0
- *******************************************************************************/
+ */
+
 package tools.vitruv.multimodelocl.lsp;
 
 /**
- * Damerau-Levenshtein edit-distance utilities shared by the keyword "did you mean?" suggestion
- * logic in {@link LspErrorListener} and {@link DocumentAnalyzer}.
+ * Damerau-Levenshtein edit-distance utilities shared by the "did you mean" suggestion logic in
+ * {@link LspErrorListener} and {@link DocumentAnalyzer}.
  *
  * <p>Adjacent transpositions count as a single edit.
  */

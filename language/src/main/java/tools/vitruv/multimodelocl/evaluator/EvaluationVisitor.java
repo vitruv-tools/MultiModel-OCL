@@ -26,6 +26,7 @@ import org.eclipse.emf.ecore.EClass;
 import org.eclipse.emf.ecore.EEnumLiteral;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EStructuralFeature;
+import org.eclipse.emf.ecore.EcorePackage;
 import tools.vitruv.multimodelocl.OCLBaseVisitor;
 import tools.vitruv.multimodelocl.OCLParser;
 import tools.vitruv.multimodelocl.common.AbstractPhaseVisitor;
@@ -343,7 +344,7 @@ public class EvaluationVisitor extends AbstractPhaseVisitor<Value> {
         val = "{" + attr + "}";
       } else {
         String raw = String.valueOf(instance.eGet(feature));
-        boolean isString = feature.getEType() == org.eclipse.emf.ecore.EcorePackage.Literals.ESTRING;
+        boolean isString = feature.getEType() == EcorePackage.Literals.ESTRING;
         val = isString ? "\"" + raw + "\"" : raw;
       }
       m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(val));

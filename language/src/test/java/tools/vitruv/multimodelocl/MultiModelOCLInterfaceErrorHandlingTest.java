@@ -727,7 +727,9 @@ public class MultiModelOCLInterfaceErrorHandlingTest {
     assertEquals(1, violations.size(), "Should have exactly one violation");
 
     String message = violations.get(0).getMessage();
-    assertTrue(message.contains("[WARNING]"), "Violation should use standard format with default severity");
+    assertTrue(
+        message.contains("[WARNING]"),
+        "Violation should use standard format with default severity");
     assertTrue(message.contains("operationalCheck"), "Violation should include constraint name");
     assertTrue(message.contains("Spacecraft"), "Violation should reference Spacecraft");
     assertFalse(

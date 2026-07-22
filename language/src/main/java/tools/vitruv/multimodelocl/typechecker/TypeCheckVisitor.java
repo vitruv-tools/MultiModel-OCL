@@ -584,7 +584,9 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
       errors.add(
           ctx.getStart().getLine(),
           ctx.getStart().getCharPositionInLine(),
-          "Unknown severity level '" + val + "'. Valid values: CRITICAL, WARNING, MAJOR, MINOR, INFO",
+          "Unknown severity level '"
+              + val
+              + "'. Valid values: CRITICAL, WARNING, MAJOR, MINOR, INFO",
           ErrorSeverity.ERROR,
           "type-checker");
     }
@@ -5297,7 +5299,10 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
     return Type.ERROR;
   }
 
-  /** Catches a no-arg operation called with arguments — e.g. {@code allInstances(B)}, {@code size(x)}. */
+  /**
+   * Catches a no-arg operation called with arguments — e.g. {@code allInstances(B)}, {@code
+   * size(x)}.
+   */
   @Override
   public Type visitNoArgOpWithArgs(OCLParser.NoArgOpWithArgsContext ctx) {
     for (OCLParser.ExpCSContext arg : ctx.args) {
@@ -5324,7 +5329,10 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
     return Type.ERROR;
   }
 
-  /** Catches an operation keyword used without parentheses — e.g. {@code .notEmpty}, {@code .select}. */
+  /**
+   * Catches an operation keyword used without parentheses — e.g. {@code .notEmpty}, {@code
+   * .select}.
+   */
   @Override
   public Type visitOpMissingParens(OCLParser.OpMissingParensContext ctx) {
     org.antlr.v4.runtime.Token op = ctx.op;
@@ -5363,14 +5371,13 @@ public class TypeCheckVisitor extends AbstractPhaseVisitor<Type> {
     visit(ctx.right);
 
     String op = ctx.op.getText();
-    String hint =
-        switch (op) {
-          case "<>" -> " — did you mean `!=`? (OCL standard `<>` is not supported)";
-          case "><" -> " — did you mean `!=` or a comparison?";
-          case "+-" -> " — use `+` or `-` as separate operators";
-          case "-+" -> " — use `-` or `+` as separate operators";
-          default -> "";
-        };
+    String hint = switch (op) {
+      case "<>" -> " — did you mean `!=`? (OCL standard `<>` is not supported)";
+      case "><" -> " — did you mean `!=` or a comparison?";
+      case "+-" -> " — use `+` or `-` as separate operators";
+      case "-+" -> " — use `-` or `+` as separate operators";
+      default -> "";
+    };
 
     org.antlr.v4.runtime.Token tok = ctx.op;
     int endCol = tok.getCharPositionInLine() + tok.getText().length();
