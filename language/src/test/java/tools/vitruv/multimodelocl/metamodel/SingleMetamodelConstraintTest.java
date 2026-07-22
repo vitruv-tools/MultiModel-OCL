@@ -47,6 +47,8 @@ public class SingleMetamodelConstraintTest {
   private static final Path SPACECRAFT_FORALL = Path.of("spacecraft-forall.spacemission");
   private static final Path SPACECRAFT_ACTIVE = Path.of("spacecraft-active.spacemission");
   private static final Path SPACECRAFT_INACTIVE = Path.of("spacecraft-inactive.spacemission");
+  private static final Path ASTRONAUT_NO_SPACECRAFT =
+      Path.of("astronaut-no-spacecraft.spacemission");
 
   @BeforeAll
   public static void setupPaths() {
@@ -120,6 +122,31 @@ public class SingleMetamodelConstraintTest {
 
     assertTrue(result.isSuccess());
     assertTrue(result.isSatisfied());
+  }
+
+  /**
+   * Tests navigation through an unset single-valued, optional EReference (lowerBound="0",
+   * upperBound="1").
+   *
+   * <p>Regression test: navigating {@code assignedSpacecraft} used to throw {@code
+   * RuntimeException("Cannot wrap null value")} because the unset reference was passed to {@code
+   * wrapValue()} unchecked. Per OCL's "everything is a sequence" semantics, an unset optional
+   * feature must evaluate to an empty collection instead of crashing. The constraint navigates the
+   * unset reference twice (rather than via isEmpty()/notEmpty(), which require a genuine
+   * collection-typed receiver) so the fix is exercised without relying on a definedness check the
+   * language does not yet expose for singleton-typed features. Uses an Astronaut whose {@code
+   * assignedSpacecraft} reference is left unset.
+   */
+  @Test
+  public void testUnsetOptionalReferenceNavigationDoesNotThrow() throws Exception {
+    String constraint =
+        "context spaceMission::Astronaut inv: self.assignedSpacecraft == self.assignedSpacecraft";
+    ConstraintResult result =
+        MultiModelOCLInterface.evaluateConstraint(
+            constraint, new Path[] {SPACEMISSION_ECORE}, new Path[] {ASTRONAUT_NO_SPACECRAFT});
+
+    assertTrue(result.isSuccess(), "Evaluation should succeed instead of throwing");
+    assertTrue(result.isSatisfied(), "Unset optional reference should evaluate to an empty set");
   }
 
   /**

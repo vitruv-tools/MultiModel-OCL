@@ -106,6 +106,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (editor && editor.document === event.document && editor.document.languageId === 'multimodelocl') {
                 updateGutterIcons(editor);
                 updateInlineErrors(editor);
+                triggerSuggestAfterInvNewline(editor, event);
             }
         })
     );
@@ -160,6 +161,28 @@ function updateGutterIcons(editor: vscode.TextEditor) {
     }
 }
 
+interface ViolationStyle {
+    symbol: string;
+    color: string;
+}
+
+const SEVERITY_STYLE: Record<string, ViolationStyle> = {
+    CRITICAL: { symbol: '✖', color: '#e05252' },
+    WARNING:  { symbol: '⚠', color: '#e0b84a' },
+    MAJOR:    { symbol: '⚠', color: '#d4773a' },
+    MINOR:    { symbol: '⚠', color: '#c8b84a' },
+    INFO:     { symbol: 'ℹ', color: '#5b9bd5' },
+};
+
+function parseViolationBlock(block: string): { severity: string; message: string } {
+    // MultiModelOCL warning format: "[SEVERITY] constraintName @ filename :: message"
+    const sevMatch = block.match(/\[([A-Z]+)\]/);
+    const severity = sevMatch ? sevMatch[1] : 'WARNING';
+    const sepIdx = block.lastIndexOf(' :: ');
+    const message = sepIdx >= 0 ? block.substring(sepIdx + 4).trim() : block;
+    return { severity, message };
+}
+
 function updateInlineErrors(editor: vscode.TextEditor, constraintDetails?: Map<string, string[]>) {
     const oldInlineDecoration = currentDecorations.get('inline_errors');
     if (oldInlineDecoration) {
@@ -182,35 +205,43 @@ function updateInlineErrors(editor: vscode.TextEditor, constraintDetails?: Map<s
                 const lineLength = line.length;
                 const range = new vscode.Range(i, lineLength, i, lineLength);
 
-                let errorText = `${constraintName} violated`;
                 const details = constraintDetails?.get(constraintName);
+
+                // Build inline text from first violation
+                let inlineText: string;
+                let inlineColor: string;
                 if (details && details.length > 0) {
-                    errorText = details[0];
-                    if (details.length > 1) {
-                        errorText += ` (+${details.length - 1} more)`;
-                    }
+                    const { severity, message } = parseViolationBlock(details[0]);
+                    const style = SEVERITY_STYLE[severity] ?? SEVERITY_STYLE['WARNING'];
+                    inlineColor = style.color;
+                    const suffix = details.length > 1 ? ` (+${details.length - 1} more)` : '';
+                    inlineText = ` ◀ ${style.symbol} ${severity}: ${message}${suffix}`;
+                } else {
+                    inlineText = ` ◀ ⚠ WARNING: ${constraintName} violated`;
+                    inlineColor = SEVERITY_STYLE['WARNING'].color;
                 }
 
+                // Build hover with all violations as formatted blocks
                 const hover = new vscode.MarkdownString();
-                hover.appendMarkdown(`**❌ Constraint violated**\n\n`);
-
+                hover.isTrusted = true;
+                hover.supportHtml = true;
                 if (details && details.length > 0) {
                     for (const d of details) {
-                        hover.appendMarkdown(`- ${d}\n`);
+                        const { severity, message } = parseViolationBlock(d);
+                        const style = SEVERITY_STYLE[severity] ?? SEVERITY_STYLE['WARNING'];
+                        hover.appendMarkdown(`${style.symbol} **${severity}:** ${message}\n\n`);
                     }
                 } else {
-                    hover.appendMarkdown(`${constraintName} violated`);
+                    hover.appendMarkdown(`⚠ **WARNING:** ${constraintName} violated`);
                 }
-
-                hover.isTrusted = true;
 
                 const decoration: vscode.DecorationOptions = {
                     range,
                     hoverMessage: hover,
                     renderOptions: {
                         after: {
-                            contentText: ` ◀ ${errorText}`,
-                            color: new vscode.ThemeColor('errorForeground'),
+                            contentText: inlineText,
+                            color: inlineColor,
                             margin: '0 0 0 20px'
                         }
                     }
@@ -285,16 +316,25 @@ async function runAllConstraints() {
 
         vscode.window.showInformationMessage('Running all constraints...');
 
-        const { stdout, stderr } = await execFile('java', [
+        const batchArgs = [
             '-jar', compilerPath,
             'eval-batch',
             document.fileName,
             '--ecore', ecoreFiles.join(','),
             '--xmi', instanceFiles.join(',')
-        ]).catch(err => ({
+        ];
+
+        const execResult = await execFile('java', batchArgs).catch(err => ({
             stdout: err.stdout || '',
             stderr: err.stderr || err.message
         }));
+        const stdout = execResult.stdout;
+        const stderr = (execResult as any).stderr || '';
+
+        // Surface CLI stderr in the output channel so debug prints are visible
+        if (stderr && outputChannel) {
+            outputChannel.appendLine('[CLI-STDERR] ' + stderr.trim().split('\n').join('\n[CLI-STDERR] '));
+        }
 
         const result = JSON.parse(stdout) as BatchEvalResult;
 
@@ -366,11 +406,23 @@ async function runConstraint(constraintName: string, documentUri: vscode.Uri) {
 
         vscode.window.showInformationMessage(`Running: ${constraintName}...`);
 
-        const { stdout } = await execFile('java', [
+        const execResult = await execFile('java', [
             '-jar', compilerPath, 'eval', tempFile,
             '--ecore', ecoreFiles.join(','),
             '--xmi', instanceFiles.join(',')
-        ]).catch(err => ({ stdout: err.stdout || '' }));
+        ]).catch(err => ({ stdout: err.stdout || '', stderr: err.stderr || err.message || '' }));
+
+        const stdout = execResult.stdout;
+        const stderr = (execResult as any).stderr || '';
+
+        if (stderr && outputChannel) {
+            outputChannel.appendLine('[CLI-STDERR] ' + stderr.trim().split('\n').join('\n[CLI-STDERR] '));
+        }
+
+        if (!stdout.trim()) {
+            const hint = stderr ? `\n\nStderr:\n${stderr.trim()}` : '';
+            throw new Error(`Java process produced no output.${hint}`);
+        }
 
         const result = JSON.parse(stdout) as EvalResult;
 
@@ -562,11 +614,16 @@ function extractConstraint(text: string, constraintName: string): string | null 
         }
 
         if (collecting && i > startLine) {
-            constraint += line + '\n';
-            if (line.trim().startsWith('context')) {
-                constraint = constraint.substring(0, constraint.length - line.length - 1);
+            const trimmed = line.trim();
+            // Stop at the next constraint's context declaration
+            if (trimmed.startsWith('context ')) {
                 break;
             }
+            // Skip comment lines — the CLI eval command does not strip them
+            if (trimmed.startsWith('--')) {
+                continue;
+            }
+            constraint += line + '\n';
         }
     }
 
@@ -718,6 +775,51 @@ function showSummaryResult(passed: number, failed: number, constraints: Constrai
         vscode.window.showInformationMessage(`✅ All ${total} constraints passed!`);
     } else {
         vscode.window.showWarningMessage(`❌ ${failed}/${total} constraints failed`);
+    }
+}
+
+/**
+ * After the user presses Enter on an 'inv ...:' line, automatically opens
+ * the suggestion widget on the new blank/indented line below.
+ */
+function triggerSuggestAfterInvNewline(
+    editor: vscode.TextEditor,
+    event: vscode.TextDocumentChangeEvent
+): void {
+    for (const change of event.contentChanges) {
+        if (!change.text.includes('\n')) continue;
+
+        const newLine = change.range.start.line + 1;
+        const doc = editor.document;
+        if (newLine >= doc.lineCount) continue;
+
+        // The new line must be empty / whitespace only.
+        const newLineText = doc.lineAt(newLine).text;
+        if (newLineText.trim() !== '') continue;
+
+        // Walk upward from the new line: only suggest annotations when every non-blank
+        // line between here and the 'inv ...:' header is itself an annotation line.
+        // The moment we hit any other content (OCL body), we stop.
+        let inAnnotationZone = false;
+        for (let i = newLine - 1; i >= 0; i--) {
+            const lineText = doc.lineAt(i).text;
+            const trimmed = lineText.trim();
+            if (trimmed === '') continue; // blank lines are fine
+            if (/\binv\s+\w+\s*:/.test(lineText)) {
+                inAnnotationZone = true; // reached the inv header — we're in the zone
+                break;
+            }
+            if (/^\s*@(severity|message)\b/.test(lineText)) continue; // other annotation — ok
+            break; // anything else means we're in the OCL body
+        }
+        if (!inAnnotationZone) continue;
+
+        // Move cursor to end of indentation and fire suggest.
+        const indentEnd = newLineText.length;
+        const pos = new vscode.Position(newLine, indentEnd);
+        editor.selection = new vscode.Selection(pos, pos);
+        vscode.commands.executeCommand('editor.action.triggerSuggest');
+        break;
     }
 }
 

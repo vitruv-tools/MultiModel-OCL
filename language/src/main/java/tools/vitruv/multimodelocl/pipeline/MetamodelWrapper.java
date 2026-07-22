@@ -13,8 +13,11 @@
 package tools.vitruv.multimodelocl.pipeline;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.*;
 import org.eclipse.emf.ecore.resource.Resource;
@@ -65,6 +68,10 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
   /** EMF resource set for loading metamodels. */
   private final ResourceSet resourceSet;
 
+  /** Matches any {@code platform:/plugin/.../<name>.ecore} URI in an ecore file. */
+  private static final Pattern PLATFORM_PLUGIN_ECORE_PATTERN =
+      Pattern.compile("platform:/plugin/[^\"#\\s]+\\.ecore");
+
   /** Creates metamodel wrapper with EMF resource factories configured. */
   public MetamodelWrapper() {
     this.resourceSet = new ResourceSetImpl();
@@ -76,6 +83,58 @@ public class MetamodelWrapper implements MetamodelWrapperInterface {
         .getResourceFactoryRegistry()
         .getExtensionToFactoryMap()
         .put("xmi", new XMIResourceFactoryImpl());
+  }
+
+  /**
+   * Scans a set of workspace {@code .ecore} files for {@code platform:/plugin/} cross-references
+   * and registers URI mappings so EMF can resolve them to local files without any manual
+   * configuration.
+   *
+   * <p>How it works:
+   *
+   * <ol>
+   *   <li>Build a {@code filename → file URI} map from {@code ecorePaths} (e.g. {@code
+   *       "stoex.ecore" → file:/C:/…/stoex.ecore}).
+   *   <li>Scan each ecore file's raw text for {@code platform:/plugin/.../<name>.ecore} URIs.
+   *   <li>When the referenced filename matches one of the supplied ecore files, register a
+   *       resource-set URI mapping so EMF resolves the platform URI to the local file instead of
+   *       failing outside an Eclipse/OSGi runtime.
+   * </ol>
+   *
+   * <p>Without this, cross-ecore {@code eSuperTypes} references that use {@code platform:/plugin/}
+   * URIs (common in Eclipse-plugin-authored metamodels such as Palladio PCM) fail to resolve
+   * outside of an actual Eclipse installation, so inherited features on such types silently
+   * disappear.
+   *
+   * @param ecorePaths the workspace's {@code .ecore} files to scan and register
+   */
+  public void registerWorkspaceEcoresForPlatformResolution(List<Path> ecorePaths) {
+    // filename.ecore -> file URI of the local copy
+    Map<String, URI> byFilename = new HashMap<>();
+    for (Path p : ecorePaths) {
+      String name = p.getFileName().toString();
+      byFilename.put(name, URI.createFileURI(p.toAbsolutePath().toString()));
+    }
+
+    Map<URI, URI> uriMap = resourceSet.getURIConverter().getURIMap();
+
+    for (Path ecorePath : ecorePaths) {
+      try {
+        String content = Files.readString(ecorePath);
+        Matcher m = PLATFORM_PLUGIN_ECORE_PATTERN.matcher(content);
+        while (m.find()) {
+          String platformUriStr = m.group();
+          URI platformUri = URI.createURI(platformUriStr);
+          String filename = platformUri.lastSegment();
+          URI localUri = byFilename.get(filename);
+          if (localUri != null) {
+            uriMap.computeIfAbsent(platformUri, k -> localUri);
+          }
+        }
+      } catch (IOException e) {
+        // unreadable file — skip silently
+      }
+    }
   }
 
   /**

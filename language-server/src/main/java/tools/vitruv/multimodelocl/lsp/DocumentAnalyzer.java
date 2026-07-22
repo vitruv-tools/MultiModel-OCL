@@ -11,6 +11,9 @@ package tools.vitruv.multimodelocl.lsp;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTreeProperty;
@@ -43,10 +46,36 @@ import tools.vitruv.multimodelocl.typechecker.TypeCheckVisitor;
  */
 public class DocumentAnalyzer {
 
+  private static final Logger LOG = Logger.getLogger(DocumentAnalyzer.class.getName());
+
+  private static final String LANGUAGE_ID = "multimodelocl";
+
   private final MetamodelWrapper wrapper;
 
   public DocumentAnalyzer(MetamodelWrapper wrapper) {
     this.wrapper = wrapper;
+  }
+
+  /*
+   * Strips import declaration lines, preserving line numbers by replacing content with a comment.
+   */
+  private static String stripImportLines(String text) {
+    StringBuilder sb = new StringBuilder(text.length());
+    for (String line : text.split("\n", -1)) {
+      String trimmed = line.stripLeading();
+      if (trimmed.startsWith("import ")) {
+        // Replace with a blank comment of the same length so line numbers are preserved
+        sb.append("--").append(" ".repeat(Math.max(0, line.length() - 2)));
+      } else {
+        sb.append(line);
+      }
+      sb.append('\n');
+    }
+    // Remove the trailing '\n' added for the last line if original didn't have it
+    if (!text.endsWith("\n") && !sb.isEmpty()) {
+      sb.deleteCharAt(sb.length() - 1);
+    }
+    return sb.toString();
   }
 
   /**
@@ -59,6 +88,13 @@ public class DocumentAnalyzer {
     List<Diagnostic> diagnostics = new ArrayList<>();
     OCLParser.ContextDeclCSContext tree = null;
     ParseTreeProperty<Type> nodeTypes = null;
+
+    // Strip import declarations before parsing — the OCL grammar has no import rule.
+    // We replace them with blank comments to preserve line numbers for diagnostics.
+    documentText = stripImportLines(documentText);
+
+    // Pre-parse scan: flag @keyword typos with quick-fix suggestions before ANTLR runs.
+    checkAnnotationKeywordTypos(documentText, diagnostics);
 
     try {
       // -----------------------------------------------------------------------
@@ -93,7 +129,7 @@ public class DocumentAnalyzer {
             new SymbolTableBuilder(symbolTable, wrapper, errors, scopeAnnotator);
         builder.visit(tree);
       } catch (Exception e) {
-        System.err.println("[OCL-LS] SymbolTableBuilder error: " + e.getMessage());
+        LOG.fine(() -> "[OCL-LS] SymbolTableBuilder error: " + e.getMessage());
       }
 
       // -----------------------------------------------------------------------
@@ -105,7 +141,7 @@ public class DocumentAnalyzer {
         typeChecker.visit(tree);
         nodeTypes = typeChecker.getNodeTypes();
       } catch (Exception e) {
-        System.err.println("[OCL-LS] TypeCheckVisitor error: " + e.getMessage());
+        LOG.fine(() -> "[OCL-LS] TypeCheckVisitor error: " + e.getMessage());
       }
 
       // -----------------------------------------------------------------------
@@ -128,32 +164,99 @@ public class DocumentAnalyzer {
 
         Diagnostic d = toDiagnostic(error);
         diagnostics.add(d);
-        System.err.printf(
-            "[OCL-LS] DIAG type-checker  L%d:C%d → L%d:C%d  %s%n",
-            d.getRange().getStart().getLine(),
-            d.getRange().getStart().getCharacter(),
-            d.getRange().getEnd().getLine(),
-            d.getRange().getEnd().getCharacter(),
-            d.getMessage());
+        LOG.fine(
+            () ->
+                String.format(
+                    "[OCL-LS] DIAG type-checker  L%d:C%d → L%d:C%d  %s",
+                    d.getRange().getStart().getLine(),
+                    d.getRange().getStart().getCharacter(),
+                    d.getRange().getEnd().getLine(),
+                    d.getRange().getEnd().getCharacter(),
+                    error.getMessage()));
       }
 
     } catch (Exception e) {
       // Catch-all — return empty analysis with a single internal-error diagnostic.
-      System.err.println("[OCL-LS] Unexpected analysis error: " + e.getMessage());
+      LOG.fine(() -> "[OCL-LS] Unexpected analysis error: " + e.getMessage());
       diagnostics.add(
           new Diagnostic(
               new Range(new Position(0, 0), new Position(0, 1)),
               "Internal language server error: " + e.getMessage(),
               DiagnosticSeverity.Error,
-              "multimodelocl"));
+              LANGUAGE_ID));
     }
 
     return new DocumentAnalysis(tree, nodeTypes, diagnostics);
   }
 
   // ---------------------------------------------------------------------------
-  // Helpers
+  // Annotation keyword typo detection
   // ---------------------------------------------------------------------------
+
+  private static final Pattern AT_WORD = Pattern.compile("@(\\w+)");
+  private static final List<String> ANNOTATION_KEYWORDS = List.of("severity", "message");
+
+  /**
+   * Scans {@code text} for {@code @word} tokens that look like misspellings of {@code @severity} or
+   * {@code @message} and appends a diagnostic with a quick-fix suggestion.
+   */
+  private static void checkAnnotationKeywordTypos(String text, List<Diagnostic> diagnostics) {
+    String[] lines = text.split("\n", -1);
+    for (int lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+      Matcher m = AT_WORD.matcher(lines[lineIdx]);
+      while (m.find()) {
+        String word = m.group(1);
+        // Exact match — valid annotation keyword, skip; otherwise report if it looks close.
+        if (!ANNOTATION_KEYWORDS.contains(word)) {
+          reportAnnotationTypoIfClose(word, m, lineIdx, diagnostics);
+        }
+      }
+    }
+  }
+
+  /**
+   * Reports a diagnostic for {@code word} if it is close enough (by edit distance) to a known
+   * annotation keyword to be considered a likely typo.
+   */
+  private static void reportAnnotationTypoIfClose(
+      String word, Matcher m, int lineIdx, List<Diagnostic> diagnostics) {
+    // Find the closest known annotation keyword.
+    String bestKeyword = null;
+    int bestDist = Integer.MAX_VALUE;
+    for (String kw : ANNOTATION_KEYWORDS) {
+      int dist = EditDistance.damerauLevenshtein(word.toLowerCase(), kw);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestKeyword = kw;
+      }
+    }
+
+    // Only flag if within edit distance 3 (generous — covers @Severity, @severit, @sev, @msg).
+    int threshold = EditDistance.editThreshold(word.length());
+    if (bestKeyword == null || bestDist > threshold) {
+      return;
+    }
+
+    int startCol = m.start(); // position of '@'
+    int endCol = m.end();
+    String suggestion = "@" + bestKeyword;
+    String badAnnotation = "@" + word;
+
+    Diagnostic d =
+        new Diagnostic(
+            new Range(new Position(lineIdx, startCol), new Position(lineIdx, endCol)),
+            "Unknown annotation '" + badAnnotation + "'. Did you mean '" + suggestion + "'?",
+            DiagnosticSeverity.Error,
+            LANGUAGE_ID);
+    d.setData(suggestion); // picked up by the code-action handler for the quick fix
+    diagnostics.add(d);
+    final int capturedLine = lineIdx;
+    LOG.fine(
+        () ->
+            String.format(
+                "[OCL-LS] DIAG annotation-typo L%d:C%d  %s → %s",
+                capturedLine, startCol, badAnnotation, suggestion));
+  }
 
   /**
    * Returns line ranges (0-based, inclusive) of {@code invCS} nodes whose type-checker diagnostics
@@ -237,10 +340,19 @@ public class DocumentAnalyzer {
             ? DiagnosticSeverity.Error
             : DiagnosticSeverity.Warning;
 
-    return new Diagnostic(
-        new Range(new Position(startLine, startCol), new Position(endLine, endCol)),
-        error.getMessage(),
-        severity,
-        "multimodelocl");
+    Diagnostic d =
+        new Diagnostic(
+            new Range(new Position(startLine, startCol), new Position(endLine, endCol)),
+            error.getMessage(),
+            severity,
+            LANGUAGE_ID);
+
+    // Attach the quick-fix suggestion as diagnostic data so the codeAction handler
+    // can build a WorkspaceEdit without re-analysing the document.
+    if (error.getSuggestion() != null) {
+      d.setData(error.getSuggestion());
+    }
+
+    return d;
   }
 }

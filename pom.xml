@@ -30,6 +30,7 @@
     <modules>
         <module>language</module>
         <module>language-server</module>
+        <module>vscode-extension</module>
     </modules>
 
     <properties>

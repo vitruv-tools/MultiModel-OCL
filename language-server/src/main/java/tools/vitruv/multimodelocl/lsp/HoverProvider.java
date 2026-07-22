@@ -75,10 +75,33 @@ public class HoverProvider {
     if (node == null) return null;
 
     // ------------------------------------------------------------------
-    // 1. Known operation keyword / method name
+    // 1. Annotation keywords (@severity / @message)
     // ------------------------------------------------------------------
     if (node instanceof TerminalNode terminal) {
       String tokenText = terminal.getSymbol().getText();
+      if ("@severity".equals(tokenText)) {
+        return buildAnnotationHover(
+            "@severity",
+            "Sets the severity of a constraint violation. Placed after the invariant `:` before the"
+                + " body.",
+            "**Values:** `CRITICAL` | `WARNING` *(default)* | `MAJOR` | `MINOR` | `INFO`",
+            "@severity CRITICAL\nself.radius > 0");
+      }
+      if ("@message".equals(tokenText)) {
+        return buildAnnotationHover(
+            "@message",
+            "Custom violation message. Supports `{self}` and `{self.attr}` template variables.",
+            "**Template variables:** `{self}` — the context object · `{self.attr}` — an attribute"
+                + " value",
+            "@message \"Brake disk {self.name} has no radius defined\"");
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // 2. Known operation keyword / method name
+    // ------------------------------------------------------------------
+    if (node instanceof TerminalNode terminal2) {
+      String tokenText = terminal2.getSymbol().getText();
       Optional<OperationDoc> doc = OclOperationDocs.lookup(tokenText);
       if (doc.isPresent()) {
         return buildOperationHover(doc.get());
@@ -257,6 +280,22 @@ public class HoverProvider {
 
   // ---------------------------------------------------------------------------
 
+  private static Hover buildAnnotationHover(
+      String keyword, String description, String details, String example) {
+    String md =
+        "### `"
+            + keyword
+            + "`\n\n"
+            + description
+            + "\n\n"
+            + details
+            + "\n\n"
+            + "**Example:**\n```ocl\n"
+            + example
+            + "\n```";
+    return hover(md);
+  }
+
   private static Hover buildDiagnosticHover(List<Diagnostic> hits) {
     StringBuilder sb = new StringBuilder();
     for (Diagnostic d : hits) {
@@ -266,9 +305,27 @@ public class HoverProvider {
             case Warning -> "$(warning)";
             default -> "$(info)";
           };
-      sb.append(icon).append(" **").append(d.getMessage()).append("**\n\n");
+      sb.append(icon).append(" **").append(diagnosticMessageText(d)).append("**\n\n");
     }
     return hover(sb.toString().stripTrailing());
+  }
+
+  /**
+   * Extracts the plain text of a diagnostic's message.
+   *
+   * <p>{@link Diagnostic#getMessage()} returns {@code Either<String, MarkupContent>} — appending
+   * that {@code Either} directly (e.g. via {@code StringBuilder.append}) prints its {@code
+   * toString()} ("Either [left=..., right=null]") instead of the actual text. All diagnostics
+   * constructed by this language server use the plain-{@code String} constructor, so the value is
+   * always on the left; the {@code MarkupContent} branch is handled defensively in case that ever
+   * changes.
+   */
+  private static String diagnosticMessageText(Diagnostic d) {
+    var message = d.getMessage();
+    if (message == null) {
+      return "";
+    }
+    return message.isLeft() ? message.getLeft() : message.getRight().getValue();
   }
 
   /** Returns true when {@code range} contains {@code cursor} (end is exclusive). */

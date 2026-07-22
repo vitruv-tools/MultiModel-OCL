@@ -142,6 +142,12 @@ public enum Multiplicity {
       return true;
     }
 
-    return false;
+    // OrderedSet <: Set (ordered unique is a subtype of unordered unique)
+    if (this == ORDERED_SET && other == SET) {
+      return true;
+    }
+
+    // Sequence <: Bag (ordered non-unique is a subtype of unordered non-unique)
+    return this == SEQUENCE && other == BAG;
   }
 }
