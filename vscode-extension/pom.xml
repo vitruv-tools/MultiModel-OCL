@@ -55,18 +55,6 @@
 
     <build>
         <plugins>
-            <!-- Disable the MWE2 workflow generation inherited from tools.vitruv parent -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>execute-mwe2-generate</id>
-                        <phase>none</phase>
-                    </execution>
-                </executions>
-            </plugin>
-
             <!-- Step 1: copy shaded JARs into lib/ with the names the extension expects -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -124,6 +112,11 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.6.4</version>
                 <executions>
+                    <!-- Disable the MWE2 workflow generation inherited from tools.vitruv parent -->
+                    <execution>
+                        <id>execute-mwe2-generate</id>
+                        <phase>none</phase>
+                    </execution>
                     <execution>
                         <id>npm-install</id>
                         <phase>package</phase>
