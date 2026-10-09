@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -13,11 +13,9 @@
 
     <artifactId>multimodelocl-vscode-extension</artifactId>
     <packaging>pom</packaging>
-
     <name>MultiModelOCL VSCode Extension</name>
     <description>VSCode extension packaging — copies built JARs and runs vsce package</description>
 
-    <!-- Declare dependencies so Maven builds language + language-server first -->
     <dependencies>
         <dependency>
             <groupId>tools.vitruv.multimodelocl</groupId>
@@ -32,11 +30,12 @@
     </dependencies>
 
     <profiles>
-        <!-- npm executable differs between Windows and Unix -->
         <profile>
             <id>windows</id>
             <activation>
-                <os><family>windows</family></os>
+                <os>
+                    <family>windows</family>
+                </os>
             </activation>
             <properties>
                 <npm.executable>npm.cmd</npm.executable>
@@ -45,7 +44,9 @@
         <profile>
             <id>unix</id>
             <activation>
-                <os><family>unix</family></os>
+                <os>
+                    <family>unix</family>
+                </os>
             </activation>
             <properties>
                 <npm.executable>npm</npm.executable>
@@ -55,7 +56,6 @@
 
     <build>
         <plugins>
-            <!-- Step 1: copy shaded JARs into lib/ with the names the extension expects -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
@@ -63,12 +63,10 @@
                 <executions>
                     <execution>
                         <id>copy-compiler-jar</id>
-                        <!-- Must run strictly before the npm-install/npm-package execution
-                             below (also bound to the `package` phase) so vsce always zips a
-                             freshly-copied jar. Binding both to `package` and relying on plugin
-                             declaration order is not reliable in practice. -->
                         <phase>prepare-package</phase>
-                        <goals><goal>copy</goal></goals>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
                         <configuration>
                             <artifactItems>
                                 <artifactItem>
@@ -87,7 +85,9 @@
                     <execution>
                         <id>copy-language-server-jar</id>
                         <phase>prepare-package</phase>
-                        <goals><goal>copy</goal></goals>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
                         <configuration>
                             <artifactItems>
                                 <artifactItem>
@@ -106,13 +106,11 @@
                 </executions>
             </plugin>
 
-            <!-- Step 2: npm install, then vsce package -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.6.4</version>
                 <executions>
-                    <!-- Disable the MWE2 workflow generation inherited from tools.vitruv parent -->
                     <execution>
                         <id>execute-mwe2-generate</id>
                         <phase>none</phase>
@@ -120,7 +118,9 @@
                     <execution>
                         <id>npm-install</id>
                         <phase>package</phase>
-                        <goals><goal>exec</goal></goals>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
                         <configuration>
                             <executable>${npm.executable}</executable>
                             <arguments>
@@ -132,7 +132,9 @@
                     <execution>
                         <id>npm-package</id>
                         <phase>package</phase>
-                        <goals><goal>exec</goal></goals>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
                         <configuration>
                             <executable>${npm.executable}</executable>
                             <arguments>
@@ -146,5 +148,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>
