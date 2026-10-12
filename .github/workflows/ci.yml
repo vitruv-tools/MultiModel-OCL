@@ -149,8 +149,8 @@ jobs:
         check-latest: true
         cache: 'maven'
         server-id: central
-        server-username: CENTRAL_USERNAME
-        server-password: CENTRAL_PASSWORD
+        server-username: ${{ secrets.CENTRAL_USERNAME }}
+        server-password: ${{ secrets.CENTRAL_PASSWORD }}
         gpg-private-key: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
         gpg-passphrase: MAVEN_GPG_PASSPHRASE
 
